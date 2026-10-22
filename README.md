@@ -34,6 +34,7 @@ npm run format     # auto-fix formatting
 - **Palm rejection:** touch is ignored while the pen hovers and for a short time after; large or spreading contacts are palms for their whole lifetime, and so are fingers that land next to a resting palm.
 - **Pen feel panel** (gauge button, Ctrl+Shift+D): smoothing, pressure, pressure curve, palm size and pen grace time, plus live pressure/contact/sample-rate readings to tune on your own device.
 - **Pen side button** or right-click opens the radial tool and colour picker.
+- **Finger taps:** tap with two fingers to undo, three to redo (single taps; palms, slow or moving taps and taps right after the pen are ignored). If three-finger taps open Windows search instead, turn off _Settings → Bluetooth & devices → Touch → Three- and four-finger touch gestures_.
 - **Shapes:** draw a line, arrow, triangle, rectangle, circle or ellipse and hold the pen still for half a second to snap it clean (toggle with S).
 - **Ruler (R):** straight lines that snap to 15° steps (always with Shift), with a live length/angle readout.
 - **Text (T):** tap to type; tap a box to select, double-tap to edit, drag to move, drag the edge to resize; format bar for font, size, colour, bold, italic.

@@ -2,7 +2,7 @@ import './styles.css';
 import { FileText, Grid3x3, Grip, Moon, Rows3, Square, Sun, SunMoon } from 'lucide';
 import { h, icon, toast, togglePopover } from './dom';
 import { exportButton, openExport } from './export';
-import { redo, undo } from './ink';
+import { canRedo, canUndo, redo, undo } from './ink';
 import { openRadial } from './radial';
 import { addPage, search } from './sidebar';
 import { type Background, onSaveError, page, state, subscribe, type Tool, update } from './store';
@@ -107,6 +107,20 @@ const syncTheme = () => {
 };
 subscribe(syncTheme);
 syncTheme();
+
+// --- Finger tap chords from the canvas: two fingers undo, three redo, with visible feedback ---
+document.querySelector('#bg')!.addEventListener('tapgesture', (e) => {
+  const fingers = (e as CustomEvent<number>).detail;
+  if (fingers === 2) {
+    if (!canUndo()) return toast('Nothing to undo.', 1200);
+    undo();
+    toast('Undone · tap with three fingers to redo', 1500);
+  } else {
+    if (!canRedo()) return toast('Nothing to redo.', 1200);
+    redo();
+    toast('Redone', 1200);
+  }
+});
 
 // --- Radial menu: pen barrel button or right-click on the canvas ---
 const canvas = document.querySelector<HTMLCanvasElement>('#bg')!;

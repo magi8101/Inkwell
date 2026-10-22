@@ -165,8 +165,55 @@ export const isPalm = (e: PointerEvent) =>
   e.pointerType === 'touch' && (palms.has(e.pointerId) || penNear(e.timeStamp) || tooBig(e));
 export const touchCount = () => touches.size;
 
+// Tap chords: two fingers = undo, three = redo, with single taps. GoodNotes needs double taps
+// because single ones misfired on palms; here a chord only counts if every finger lands within
+// TAP_LAND_MS, none is a palm or near the pen, none moves more than TAP_SLOP and all lift within
+// TAP_MAX_MS. Any small pan the fingers caused is undone too.
+const TAP_LAND_MS = 120;
+const TAP_MAX_MS = 280;
+const TAP_SLOP = 12;
+let chord: {
+  start: number;
+  live: Set<number>;
+  max: number;
+  origin: Map<number, { x: number; y: number }>;
+  spoiled: boolean;
+  view: { x: number; y: number; scale: number };
+} | null = null;
+
+function chordDown(e: PointerEvent, palm: boolean) {
+  if (!chord || (!chord.live.size && !touches.size)) {
+    chord = {
+      start: e.timeStamp,
+      live: new Set(),
+      max: 0,
+      origin: new Map(),
+      spoiled: false,
+      view: { ...view },
+    };
+  }
+  if (palm || e.timeStamp - chord.start > TAP_LAND_MS) chord.spoiled = true;
+  chord.live.add(e.pointerId);
+  chord.origin.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  chord.max = Math.max(chord.max, chord.live.size);
+}
+
+function chordUp(e: PointerEvent, cancelled: boolean) {
+  if (!chord?.live.has(e.pointerId)) return;
+  chord.live.delete(e.pointerId);
+  if (cancelled || e.timeStamp - chord.start > TAP_MAX_MS) chord.spoiled = true;
+  if (chord.live.size) return;
+  const c = chord;
+  chord = null;
+  if (c.spoiled || c.max < 2 || c.max > 3 || !state.tuning.tapGestures) return;
+  Object.assign(view, c.view);
+  redraw();
+  canvas.dispatchEvent(new CustomEvent('tapgesture', { detail: c.max }));
+}
+
 /** Marks a touch as a palm and tells the ink layer to drop anything that touch started. */
 function rejectTouch(id: number) {
+  if (chord) chord.spoiled = true;
   palms.add(id);
   touches.delete(id);
   canvas.dispatchEvent(new CustomEvent('palm', { detail: id }));
@@ -183,7 +230,9 @@ function gesture() {
 
 canvas.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'touch') {
-    if (palms.size || isPalm(e)) {
+    const palm = palms.size > 0 || isPalm(e);
+    chordDown(e, palm);
+    if (palm) {
       palms.add(e.pointerId);
       return;
     }
@@ -206,6 +255,8 @@ canvas.addEventListener('pointermove', (e) => {
     redraw();
     return;
   }
+  const o = chord?.origin.get(e.pointerId);
+  if (chord && o && Math.hypot(e.clientX - o.x, e.clientY - o.y) > TAP_SLOP) chord.spoiled = true;
   if (!touches.has(e.pointerId)) return;
   // Palms often land small and spread; re-check every move, and drop everything if the pen arrives.
   if (penNear(e.timeStamp)) {
@@ -227,6 +278,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 const endPointer = (e: PointerEvent) => {
+  if (e.pointerType === 'touch') chordUp(e, e.type === 'pointercancel');
   touches.delete(e.pointerId);
   palms.delete(e.pointerId);
   if (e.pointerType === 'mouse') mousePan = null;

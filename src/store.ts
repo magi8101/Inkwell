@@ -113,6 +113,8 @@ export interface State {
   styles: Record<InkTool, Style>;
   eraserWidth: number;
   favorites: Favorite[];
+  /** The favourite pen being used; colour/width edits are saved back into it (like OneNote). */
+  activeFavorite: number | null;
   snap: boolean;
   theme: 'system' | 'light' | 'dark';
   /** x < 0 means "centre it". */
@@ -164,6 +166,13 @@ export const newNotebook = (name: string): Notebook => ({
 
 export const inkTool = (t: Tool): InkTool => (t === 'highlighter' ? 'highlighter' : 'pen');
 
+/** Changes a pen's style; if a favourite of that pen type is selected, it's updated too. */
+export function editStyle(s: State, tool: InkTool, patch: Partial<Style>) {
+  Object.assign(s.styles[tool], patch);
+  const i = s.activeFavorite;
+  if (i !== null && s.favorites[i]?.tool === tool) s.favorites[i] = { tool, ...s.styles[tool] };
+}
+
 const KEY = 'inkwell:state';
 
 const pen = (color: string): Favorite => ({ tool: 'pen', color, width: 3, opacity: 1 });
@@ -197,6 +206,7 @@ function defaults(): State {
     },
     eraserWidth: 20,
     favorites: DEFAULT_FAVORITES.map((f) => ({ ...f })),
+    activeFavorite: null,
     snap: true,
     theme: 'system',
     toolbar: { x: -1, y: 16, collapsed: false },
@@ -271,6 +281,10 @@ systemDark.addEventListener('change', () => update(() => {}));
 
 /** Keeps the selected notebook/section/page pointing at something that exists. */
 function fixSelection(s: State) {
+  // A favourite stays selected until it's removed or the other ink tool is picked.
+  const fav = s.activeFavorite === null ? undefined : s.favorites[s.activeFavorite];
+  const otherInk = (s.tool === 'pen' || s.tool === 'highlighter') && fav?.tool !== s.tool;
+  if (!fav || otherInk) s.activeFavorite = null;
   if (!s.notebooks.length) s.notebooks.push(newNotebook('My Notebook'));
   for (const n of s.notebooks)
     for (const x of n.sections)

@@ -17,7 +17,7 @@ import {
 } from 'lucide';
 import { capture, clamp, h, icon, toast, togglePopover } from './dom';
 import { canRedo, canUndo, redo, undo } from './ink';
-import { inkTool, PALETTE, state, subscribe, type Tool, update } from './store';
+import { editStyle, inkTool, PALETTE, state, subscribe, type Tool, update } from './store';
 import { BLACK, inkColor } from './stroke';
 import { pageIsDark } from './viewport';
 
@@ -115,6 +115,7 @@ const addFav = btn('Save current pen as favourite', StarPlus, () =>
       return;
     }
     s.favorites = [...s.favorites, { tool, ...st }];
+    s.activeFavorite = s.favorites.length - 1;
     toast('Saved to favourites.', 1500);
   }),
 );
@@ -186,7 +187,7 @@ function stylePanel(): HTMLElement {
   const st = () => state.styles[tool];
   const set = (patch: Partial<typeof state.styles.pen>) =>
     update((s) => {
-      Object.assign(s.styles[tool], patch);
+      editStyle(s, tool, patch);
     });
 
   const preview = h('div', { class: 'stroke-preview' }, h('span'));
@@ -235,14 +236,23 @@ function stylePanel(): HTMLElement {
     else hex.setAttribute('aria-invalid', 'true');
   });
   hex.addEventListener('blur', refresh);
+  // 'input' fires while dragging in the picker; some browsers' pickers only send 'change'.
   picker.addEventListener('input', () => set({ color: picker.value }));
+  picker.addEventListener('change', () => set({ color: picker.value }));
   width.addEventListener('input', () => set({ width: Number(width.value) }));
   opacity.addEventListener('input', () => set({ opacity: Number(opacity.value) / 100 }));
 
   const panel = h(
     'div',
     { class: 'style-panel' },
-    h('div', { class: 'panel-title' }, tool === 'pen' ? 'Pen' : 'Highlighter'),
+    h(
+      'div',
+      { class: 'panel-title' },
+      tool === 'pen' ? 'Pen' : 'Highlighter',
+      state.activeFavorite !== null
+        ? h('span', { class: 'panel-hint' }, ` · editing favourite ${state.activeFavorite + 1}`)
+        : null,
+    ),
     preview,
     h('div', { class: 'palette' }, ...swatches),
     h('div', { class: 'hex-row' }, picker, hex),
@@ -264,11 +274,7 @@ function stylePanel(): HTMLElement {
 function renderFavorites() {
   favs.replaceChildren(
     ...state.favorites.map((f, i) => {
-      const active =
-        inkTool(state.tool) === f.tool &&
-        !isEraser(state.tool) &&
-        state.styles[f.tool].color === f.color &&
-        state.styles[f.tool].width === f.width;
+      const active = state.activeFavorite === i && !isEraser(state.tool);
       return h(
         'button',
         {
@@ -276,16 +282,19 @@ function renderFavorites() {
           style: `--c:${shown(f.color)};--o:${f.opacity};--w:${clamp(f.width, 3, 14)}px`,
           'aria-pressed': String(active),
           'aria-label': `${f.tool} ${f.color} ${f.width}px`,
-          title: `${f.tool === 'pen' ? 'Pen' : 'Highlighter'} · ${f.width}px — right-click to remove`,
+          title: `${f.tool === 'pen' ? 'Pen' : 'Highlighter'} · ${f.width}px — tap the colour chip to edit, right-click to remove`,
           onclick: () =>
             update((s) => {
               s.tool = f.tool;
               s.styles[f.tool] = { color: f.color, width: f.width, opacity: f.opacity };
+              s.activeFavorite = i;
             }),
           oncontextmenu: (e: Event) => {
             e.preventDefault();
             update((s) => {
               s.favorites.splice(i, 1);
+              if (s.activeFavorite === i) s.activeFavorite = null;
+              else if (s.activeFavorite !== null && s.activeFavorite > i) s.activeFavorite--;
             });
           },
         },

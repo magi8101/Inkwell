@@ -1,6 +1,6 @@
 import { X } from 'lucide';
 import { clamp, h, icon } from './dom';
-import { inkTool, PALETTE, state, update } from './store';
+import { editStyle, inkTool, PALETTE, state, update } from './store';
 import { colorName, setTool, shown, TOOLS } from './toolbar';
 
 const INNER = 72;
@@ -54,7 +54,7 @@ export function openRadial(x: number, y: number) {
         onclick: pick(() =>
           update((s) => {
             if (s.tool !== 'highlighter') s.tool = 'pen';
-            s.styles[inkTool(s.tool)].color = c;
+            editStyle(s, inkTool(s.tool), { color: c });
           }),
         ),
       }),

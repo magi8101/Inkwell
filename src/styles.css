@@ -344,6 +344,11 @@ button:disabled {
   font-weight: 600;
 }
 
+.panel-hint {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
 .panel-sub {
   color: var(--text-2);
   font-size: 12px;

@@ -5,7 +5,16 @@ import { exportButton, openExport } from './export';
 import { canRedo, canUndo, redo, undo } from './ink';
 import { openRadial } from './radial';
 import { addPage, search } from './sidebar';
-import { type Background, onSaveError, page, state, subscribe, type Tool, update } from './store';
+import {
+  type Background,
+  editStyle,
+  onSaveError,
+  page,
+  state,
+  subscribe,
+  type Tool,
+  update,
+} from './store';
 import './lasso';
 import './laser';
 import './text';
@@ -210,8 +219,9 @@ addEventListener('keydown', (e) => {
       if (s.tool === 'eraser' || s.tool === 'pixelEraser') {
         s.eraserWidth = Math.min(120, Math.max(4, s.eraserWidth + d * 4));
       } else {
-        const st = s.styles[s.tool === 'highlighter' ? 'highlighter' : 'pen'];
-        st.width = Math.min(40, Math.max(0.5, st.width + d * (st.width < 4 ? 0.5 : 2)));
+        const tool = s.tool === 'highlighter' ? 'highlighter' : 'pen';
+        const w = s.styles[tool].width;
+        editStyle(s, tool, { width: Math.min(40, Math.max(0.5, w + d * (w < 4 ? 0.5 : 2))) });
       }
     });
   }

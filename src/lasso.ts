@@ -16,7 +16,7 @@ import {
 import { bbox, LINE_HEIGHT } from './stroke';
 import { renderTexts } from './text';
 import { colorName, shown } from './toolbar';
-import { isPalm, penSeen, redraw, touchCount, toWorld, view } from './viewport';
+import { isPalm, penSeen, redraw, tooBig, touchCount, toWorld, view } from './viewport';
 
 // Lasso (L): draw a loop around ink and text boxes to select them. Drag inside the frame to move,
 // the corner handle to resize, the round handle to rotate. Text boxes move and scale with the
@@ -84,10 +84,23 @@ function worldBox({ strokes, texts, images }: Items) {
     b[3] = Math.max(b[3]!, k[3]);
   }
   for (const t of texts) {
-    b[0] = Math.min(b[0]!, t.x);
-    b[1] = Math.min(b[1]!, t.y);
-    b[2] = Math.max(b[2]!, t.x + t.w);
-    b[3] = Math.max(b[3]!, t.y + textHeight(t));
+    // Corners of the (possibly rotated) box, turned around its top-left like CSS draws it.
+    const cos = Math.cos(t.angle ?? 0);
+    const sin = Math.sin(t.angle ?? 0);
+    const th = textHeight(t);
+    for (const [x, y] of [
+      [0, 0],
+      [t.w, 0],
+      [0, th],
+      [t.w, th],
+    ] as const) {
+      const cx = t.x + x * cos - y * sin;
+      const cy = t.y + x * sin + y * cos;
+      b[0] = Math.min(b[0]!, cx);
+      b[1] = Math.min(b[1]!, cy);
+      b[2] = Math.max(b[2]!, cx);
+      b[3] = Math.max(b[3]!, cy);
+    }
   }
   return { x: b[0]!, y: b[1]!, w: b[2]! - b[0]!, h: b[3]! - b[1]! };
 }
@@ -125,7 +138,8 @@ function transformed(base: Snapshot, m: Matrix, scale: number): Snapshot {
     texts: base.texts.map((t) => {
       if (!selected.texts.has(t.id)) return t;
       const p = apply(m, t.x, t.y);
-      return { ...t, x: p.x, y: p.y, w: t.w * scale, size: t.size * scale };
+      const angle = (t.angle ?? 0) + Math.atan2(m.b, m.a);
+      return { ...t, x: p.x, y: p.y, w: t.w * scale, size: t.size * scale, angle };
     }),
     // Pictures move, scale and rotate with the ink drawn on them, so annotations stay aligned.
     images: (base.images ?? page().images).map((im) => {
@@ -331,6 +345,12 @@ function recolor(color: string) {
 
 const allowed = (e: PointerEvent) =>
   e.button === 0 && (e.pointerType !== 'touch' || (!penSeen && !isPalm(e) && touchCount() === 1));
+// The frame and its handles are deliberate controls, so one finger works on them even after the
+// pen has been used, and a selection made with the pen can be moved, resized and rotated by hand.
+// (Fingers are only counted on the canvas, so the old canvas rule rejected every touch here.)
+// Palm-sized contacts and second fingers are still ignored.
+const grabbable = (e: PointerEvent) =>
+  e.button === 0 && (e.pointerType !== 'touch' || (e.isPrimary && !tooBig(e)));
 
 /** Shared drag loop: live preview by swapping page content, one undo step on release. */
 function drag(
@@ -371,7 +391,7 @@ function drag(
 }
 
 frame.addEventListener('pointerdown', (e) => {
-  if (!allowed(e) || e.target !== frame) return;
+  if (!grabbable(e) || e.target !== frame) return;
   const start = toWorld(e.clientX, e.clientY);
   drag(e, frame, (m, base) => {
     const w = toWorld(m.clientX, m.clientY);
@@ -381,7 +401,7 @@ frame.addEventListener('pointerdown', (e) => {
 
 for (const handle of scaleHandles) {
   handle.addEventListener('pointerdown', (e) => {
-    if (!allowed(e)) return;
+    if (!grabbable(e)) return;
     const b = worldBox(picked());
     const c = handle.dataset.corner!;
     const pivot = { x: c.includes('w') ? b.x + b.w : b.x, y: c.includes('n') ? b.y + b.h : b.y };
@@ -397,7 +417,7 @@ for (const handle of scaleHandles) {
 }
 
 rotateHandle.addEventListener('pointerdown', (e) => {
-  if (!allowed(e)) return;
+  if (!grabbable(e)) return;
   const b = worldBox(picked());
   const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
   const s0 = toWorld(e.clientX, e.clientY);

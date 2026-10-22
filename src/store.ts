@@ -45,6 +45,8 @@ export interface TextBox {
   color: string;
   bold: boolean;
   italic: boolean;
+  /** Rotation in radians around the top-left corner (set by turning a lasso selection). */
+  angle?: number;
 }
 /** A picture on the page. Its file lives in IndexedDB ('blobs') under `blob`. */
 export interface ImageItem {

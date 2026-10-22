@@ -255,6 +255,7 @@ type TextLike = {
   color: string;
   bold: boolean;
   italic: boolean;
+  angle?: number;
 };
 
 export const fontCss = (t: TextLike) =>
@@ -287,7 +288,14 @@ export function drawTextBox(ctx: CanvasRenderingContext2D, t: TextLike, dark: bo
   const lh = t.size * LINE_HEIGHT;
   // Centre each line in its line box like CSS does.
   const pad = (lh - t.size) / 2;
+  ctx.save();
+  if (t.angle) {
+    ctx.translate(t.x, t.y);
+    ctx.rotate(t.angle);
+    ctx.translate(-t.x, -t.y);
+  }
   wrapLines(t, (s) => ctx.measureText(s).width).forEach((line, i) => {
     ctx.fillText(line, t.x, t.y + pad + i * lh);
   });
+  ctx.restore();
 }

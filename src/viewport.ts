@@ -275,7 +275,8 @@ for (const type of ['pointerover', 'pointermove', 'pointerdown'] as const) {
   );
 }
 export const penNear = (t: number) => t - lastPen < state.tuning.penGraceMs;
-const tooBig = (e: PointerEvent) => Math.max(e.width, e.height) > state.tuning.palmPx;
+/** Contact bigger than a fingertip (the palm size setting). */
+export const tooBig = (e: PointerEvent) => Math.max(e.width, e.height) > state.tuning.palmPx;
 
 const palms = new Set<number>();
 const touches = new Map<number, { x: number; y: number }>();

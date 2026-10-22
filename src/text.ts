@@ -162,7 +162,7 @@ export function renderTexts() {
       els.set(t.id, el);
       layer.append(el.box);
     }
-    el.box.style.cssText = `left:${t.x}px;top:${t.y}px;width:${t.w}px;font:${fontCss(t)};color:${inkColor(t.color, dark)}`;
+    el.box.style.cssText = `left:${t.x}px;top:${t.y}px;width:${t.w}px;font:${fontCss(t)};color:${inkColor(t.color, dark)}${t.angle ? `;transform:rotate(${t.angle}rad);transform-origin:0 0` : ''}`;
     if (editingId !== t.id && readText(el.body) !== t.text) el.body.textContent = t.text;
     el.box.classList.toggle('selected', selectedId === t.id);
     el.box.classList.toggle('editing', editingId === t.id);

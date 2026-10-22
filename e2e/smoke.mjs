@@ -146,6 +146,25 @@ async function suite() {
   F(nw, 'pointerup', h.left - 40, h.top - 40);
   R.lassoResizeCorner = (await pg()).strokes[0].width > widthBefore;
   btn('Undo').click();
+  // Rotate with a finger after the pen has been used (the pen wrote everything above): the ink
+  // and the text box turn together.
+  stroke([[300, 150], [1150, 150], [1150, 620], [300, 620], [302, 152]], { type: 'mouse', id: 1 });
+  const rot = document.querySelector('.sel-handle.rotate');
+  const rr = rot.getBoundingClientRect();
+  const fr2 = document.querySelector('.sel-frame').getBoundingClientRect();
+  const finger = (t, x, y) =>
+    rot.dispatchEvent(new PointerEvent(t, { pointerId: 60, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, width: 20, height: 20, button: t === 'pointermove' ? -1 : 0, buttons: t === 'pointerup' ? 0 : 1, bubbles: true }));
+  const rx = rr.left + 14;
+  const ry = rr.top + 14;
+  finger('pointerdown', rx, ry);
+  finger('pointermove', fr2.right + 40, fr2.top + fr2.height / 2 - 5); // a quarter turn clockwise
+  finger('pointerup', fr2.right + 40, fr2.top + fr2.height / 2 - 5);
+  const turned = await pg();
+  R.fingerRotatesAfterPen = turned.strokes[0].points[0] !== before + 0 && Math.abs((turned.texts[0].angle ?? 0) - Math.PI / 2) < 0.2;
+  btn('Undo').click();
+  R.rotateUndo = !(await pg()).texts[0].angle;
+  document.querySelector('.selbar [aria-label^="Deselect"]').click();
+  stroke([[380, 180], [720, 180], [720, 290], [380, 290], [382, 182]], { type: 'mouse', id: 1 });
   // Copy with the selection bar, deselect, then the on-screen Paste button (touch devices have no Ctrl+V).
   document.querySelector('.selbar [aria-label^="Copy"]').click();
   document.querySelector('.selbar [aria-label^="Deselect"]').click();

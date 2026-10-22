@@ -39,13 +39,13 @@ const SLIDERS: {
     hint: 'Below 1: light touch already thick. Above 1: need to press harder.',
   },
   {
-    key: 'palmSize',
+    key: 'palmPx',
     label: 'Palm size',
-    min: 15,
-    max: 120,
-    step: 1,
+    min: 40,
+    max: 300,
+    step: 5,
     unit: 'px',
-    hint: 'Touches bigger than this are palms. Rest your palm and read "contact" below.',
+    hint: 'Touches bigger than this are palms. Touch with a finger, then rest your palm, and read "contact" below; set it between the two.',
   },
   {
     key: 'penGraceMs',

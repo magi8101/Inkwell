@@ -49,8 +49,12 @@ export interface Tuning {
   thinning: number;
   /** Pressure curve exponent: below 1 is softer (thick sooner), above 1 is firmer. */
   pressureGamma: number;
-  /** Touch contacts wider or taller than this (CSS px) are palms. */
-  palmSize: number;
+  /**
+   * Touch contacts wider or taller than this (CSS px) are palms. A fingertip on a Surface at 200%
+   * scaling reports ~50 px, a resting palm 150+. (Renamed from palmSize, whose 40 px default
+   * rejected real fingers, so old saved values are dropped.)
+   */
+  palmPx: number;
   /** Ignore touch for this long after the pen was last seen (ms). */
   penGraceMs: number;
   prediction: boolean;
@@ -61,7 +65,7 @@ export const DEFAULT_TUNING: Tuning = {
   smoothing: 0.75,
   thinning: 0.55,
   pressureGamma: 1,
-  palmSize: 40,
+  palmPx: 100,
   penGraceMs: 300,
   prediction: true,
   inkTrail: true,

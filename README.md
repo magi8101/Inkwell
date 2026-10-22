@@ -35,14 +35,14 @@ npm run format     # auto-fix formatting
 - **Pen feel panel** (gauge button, Ctrl+Shift+D): smoothing, pressure, pressure curve, palm size and pen grace time, plus live pressure/contact/sample-rate readings to tune on your own device.
 - **Pen side button** or right-click opens the radial tool and colour picker.
 
-| Key | Action | Key | Action |
-| --- | --- | --- | --- |
-| P | Pen | Ctrl+Z / Ctrl+Y | Undo / redo |
-| H | Highlighter | [ / ] | Thinner / thicker |
-| E / Shift+E | Stroke / pixel eraser | Tab | Hide toolbar |
-| L | Lasso | Ctrl+\ | Sidebar |
-| T | Text box | Ctrl+F | Search |
-| R | Ruler | Ctrl+N | New page |
-| S | Shape auto-snap | Ctrl+0 / Ctrl+= / Ctrl+- | Reset / zoom in / out |
+| Key         | Action                | Key                      | Action                |
+| ----------- | --------------------- | ------------------------ | --------------------- |
+| P           | Pen                   | Ctrl+Z / Ctrl+Y          | Undo / redo           |
+| H           | Highlighter           | [ / ]                    | Thinner / thicker     |
+| E / Shift+E | Stroke / pixel eraser | Tab                      | Hide toolbar          |
+| L           | Lasso                 | Ctrl+\                   | Sidebar               |
+| T           | Text box              | Ctrl+F                   | Search                |
+| R           | Ruler                 | Ctrl+N                   | New page              |
+| S           | Shape auto-snap       | Ctrl+0 / Ctrl+= / Ctrl+- | Reset / zoom in / out |
 
 Not built yet: lasso, text boxes, ruler, shape snapping, image/PDF import, export, and file-based autosave (notes currently live in browser storage).

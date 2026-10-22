@@ -37,8 +37,10 @@ async function withHandwritingApi(strokes: Stroke[]): Promise<string | null> {
     for (const s of strokes) {
       const hs = new Ctor();
       // Point times aren't stored; an even pace keeps the order, which is what matters.
-      for (let i = 0; i < s.points.length; i += 3)
-        hs.addPoint({ x: s.points[i]!, y: s.points[i + 1]!, t: (t += 8) });
+      for (let i = 0; i < s.points.length; i += 3) {
+        t += 8;
+        hs.addPoint({ x: s.points[i]!, y: s.points[i + 1]!, t });
+      }
       drawing.addStroke(hs);
       t += 200;
     }

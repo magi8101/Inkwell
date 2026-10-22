@@ -65,7 +65,7 @@ function startEditing(id: string, before = snapshot()) {
   range.collapse(false);
   getSelection()?.removeAllRanges();
   getSelection()?.addRange(range);
-  render();
+  renderTexts();
 }
 
 function stopEditing() {
@@ -90,7 +90,7 @@ function stopEditing() {
     return;
   }
   if (!existedBefore || text !== find(id)?.text) change(id, { text }, before);
-  render();
+  renderTexts();
 }
 
 function create(clientX: number, clientY: number) {
@@ -129,7 +129,7 @@ function makeBox(id: string) {
   return { box, body };
 }
 
-function render() {
+export function renderTexts() {
   document.body.dataset.tool = state.tool;
   const texts = page().texts;
   const ids = new Set(texts.map((t) => t.id));
@@ -170,7 +170,7 @@ function onBoxDown(e: PointerEvent, id: string, box: HTMLDivElement, resizing: b
   const t = find(id);
   if (!t) return;
   selectedId = id;
-  render();
+  renderTexts();
   capture(box, e.pointerId);
   const before = snapshot();
   const start = { x: e.clientX, y: e.clientY };
@@ -222,7 +222,7 @@ bg.addEventListener('pointerup', (e) => {
   if (editingId || selectedId) {
     if (editingId) els.get(editingId)?.body.blur();
     selectedId = null;
-    render();
+    renderTexts();
     return;
   }
   create(e.clientX, e.clientY);
@@ -244,7 +244,7 @@ addEventListener('keydown', (e) => {
     startEditing(selectedId);
   } else if (e.key === 'Escape') {
     selectedId = null;
-    render();
+    renderTexts();
   }
 });
 
@@ -376,10 +376,10 @@ subscribe(() => {
     shownTool = state.tool;
     shownPage = page().id;
   }
-  render();
+  renderTexts();
 });
 // Keep the bar glued to its box while panning and zooming.
 new MutationObserver(() => {
   if (selectedId) positionBar();
 }).observe(layer, { attributes: true, attributeFilter: ['style'] });
-render();
+renderTexts();

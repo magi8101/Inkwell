@@ -5,6 +5,7 @@ import { redo, undo } from './ink';
 import { openRadial } from './radial';
 import { addPage, search } from './sidebar';
 import { type Background, onSaveError, page, state, subscribe, type Tool, update } from './store';
+import './lasso';
 import './text';
 import { setTool } from './toolbar';
 import { openTuning, tuneButton } from './tune';

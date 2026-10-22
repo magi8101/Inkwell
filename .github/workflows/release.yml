@@ -28,7 +28,7 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
           fetch-depth: 0 # all tags and history, for the name and the change list
@@ -46,12 +46,15 @@ jobs:
         run: |
           title=$(node scripts/release-notes.mjs "$TAG" notes.md)
           cat notes.md >> "$GITHUB_STEP_SUMMARY"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --draft --title "$title" --notes-file notes.md
+          api="repos/$GITHUB_REPOSITORY/releases"
+          # The id comes straight from the create/update call: a fresh draft isn't findable by tag yet.
+          if existing=$(gh release view "$TAG" --json databaseId --jq .databaseId 2>/dev/null); then
+            id=$(gh api -X PATCH "$api/$existing" -f name="$title" -F draft=true -F body=@notes.md --jq .id)
           else
-            gh release create "$TAG" --draft --verify-tag --title "$title" --notes-file notes.md
+            id=$(gh api "$api" -f tag_name="$TAG" -f name="$title" -F draft=true -F body=@notes.md --jq .id)
           fi
-          echo "id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id")" >> "$GITHUB_OUTPUT"
+          test -n "$id"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build (${{ matrix.name }})
@@ -72,10 +75,10 @@ jobs:
             args: ''
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.TAG }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

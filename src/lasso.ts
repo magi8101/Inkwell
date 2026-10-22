@@ -1,7 +1,8 @@
-import { ClipboardPaste, Copy, CopyPlus, RotateCw, Scissors, Trash2, X } from 'lucide';
+import { ClipboardPaste, Copy, CopyPlus, RotateCw, Scissors, Trash2, Type, X } from 'lucide';
 import { capture, clamp, h, icon, toast } from './dom';
 import { imageBox } from './images';
 import { commitSnapshot, type Snapshot, snapshot } from './ink';
+import { recognizeInk } from './ocr';
 import {
   type ImageItem,
   PALETTE,
@@ -218,6 +219,9 @@ function renderBar() {
     btn('Copy (Ctrl+C)', Copy, copy),
     btn('Cut (Ctrl+X)', Scissors, cut),
     btn('Duplicate (Ctrl+D)', CopyPlus, duplicate),
+    ...([...selected.strokes].length
+      ? [btn('Convert handwriting to text', Type, () => void toText())]
+      : []),
     ...(clipboard ? [btn('Paste (Ctrl+V)', ClipboardPaste, paste)] : []),
     h(
       'div',
@@ -287,6 +291,58 @@ function remove() {
 function cut() {
   copy();
   remove();
+}
+
+/** Reads the selected handwriting and replaces it with a text box (Undo brings the ink back). */
+async function toText() {
+  const ink = page().strokes.filter((s) => selected.strokes.has(s.id) && s.tool === 'pen');
+  if (!ink.length) return;
+  const pageId = page().id;
+  toast('Reading your handwriting…', 8000);
+  let text = '';
+  try {
+    text = await recognizeInk(ink);
+  } catch {
+    toast(
+      'Handwriting reading needs a one-time download. Connect to the internet and try again.',
+      5000,
+    );
+    return;
+  }
+  if (page().id !== pageId) return; // moved on to another page meanwhile
+  if (!text) {
+    toast("Couldn't read that. Clear, separate letters work best.", 3500);
+    return;
+  }
+  const boxes = ink.map(bbox);
+  const x0 = Math.min(...boxes.map((b) => b[0]));
+  const y0 = Math.min(...boxes.map((b) => b[1]));
+  const x1 = Math.max(...boxes.map((b) => b[2]));
+  const y1 = Math.max(...boxes.map((b) => b[3]));
+  const lines = text.split('\n').length;
+  const box: TextBox = {
+    id: uid(),
+    x: x0,
+    y: y0,
+    w: Math.max(80, x1 - x0 + 24),
+    text,
+    font: 'sans',
+    size: Math.round(Math.min(72, Math.max(12, (y1 - y0) / lines / LINE_HEIGHT))),
+    color: ink[0]!.color,
+    bold: false,
+    italic: false,
+  };
+  const before = snapshot();
+  const gone = new Set(ink.map((s) => s.id));
+  commitSnapshot(before, {
+    strokes: before.strokes.filter((s) => !gone.has(s.id)),
+    texts: [...before.texts, box],
+  });
+  clear();
+  toast(
+    `Converted: “${text.length > 40 ? `${text.slice(0, 40)}…` : text}” · Undo brings the ink back`,
+    4000,
+  );
 }
 
 export function insert(items: Items, dx: number, dy = dx) {

@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https://inkwell.sharmamagi0.workers.dev wss://inkwell.sharmamagi0.workers.dev"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net; worker-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https://inkwell.sharmamagi0.workers.dev wss://inkwell.sharmamagi0.workers.dev https://cdn.jsdelivr.net"
     }
   },
   "bundle": {

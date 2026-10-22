@@ -36,6 +36,7 @@
     "lucide": "^1.61.0",
     "pdf-lib": "^1.17.1",
     "perfect-freehand": "^1.2.3",
+    "tesseract.js": "^7.0.0",
     "vanilla-colorful": "^0.7.2"
   }
 }

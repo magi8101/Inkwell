@@ -50,10 +50,20 @@ const dense: number[] = [];
 for (let i = 0; i <= 500; i++) dense.push(i * 0.6 + wobble(), 100 + wobble(), 0.5);
 const cleaned = cleanPoints(dense, 8);
 assert.ok(cleaned.length < 200, `dense samples are thinned (${cleaned.length})`);
-assert.deepEqual(cleaned[0], dense.slice(0, 3), 'first point unchanged');
-assert.deepEqual(cleaned.at(-1), dense.slice(-3), 'last point unchanged');
+assert.deepEqual(cleaned[0]!.slice(0, 2), dense.slice(0, 2), 'first point stays put');
+assert.deepEqual(cleaned.at(-1)!.slice(0, 2), dense.slice(-3, -1), 'last point stays put');
 let backwards = 0;
 for (let i = 2; i < cleaned.length; i++) if (cleaned[i]![0]! < cleaned[i - 1]![0]!) backwards++;
 assert.equal(backwards, 0, 'no backwards jitter steps left to read as corners');
 assert.equal(cleanPoints([0, 0, 0.5, 10, 0, 0.5], 4).length, 2, 'short strokes pass through');
+
+// Fast iPad writing: pressure alternating 0.5 / 0.2 between samples must not pulse into beads.
+const beads: number[] = [];
+for (let i = 0; i <= 40; i++) beads.push(100, i * 12, i % 2 ? 0.2 : 0.5);
+const smooth = cleanPoints(beads, 6).map((p) => p[2]!);
+const maxJump = Math.max(...smooth.slice(1).map((v, i) => Math.abs(v - smooth[i]!)));
+assert.ok(
+  maxJump < 0.08,
+  `width no longer alternates sample to sample (jump ${maxJump.toFixed(3)})`,
+);
 console.log('stroke checks passed');

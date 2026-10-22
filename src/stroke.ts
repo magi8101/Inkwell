@@ -45,12 +45,16 @@ export function cleanPoints(points: number[], width: number): number[][] {
     kept.pop();
   kept.push(lastRaw);
   if (kept.length < 4) return kept;
-  // One pass of a [1, 2, 1] average on the interior points removes leftover zig-zag.
+  // A [1, 2, 1] average on interior positions removes leftover zig-zag. Pressure gets a wider
+  // [1, 2, 3, 2, 1] window: noisy or alternating pressure (Safari coalesced samples) otherwise
+  // makes the width pulse sample to sample, which looks like a chain of beads.
+  const pr = (i: number) => kept[Math.min(kept.length - 1, Math.max(0, i))]![2]!;
   return kept.map((p, i) => {
-    if (i === 0 || i === kept.length - 1) return p;
+    const pressure = (pr(i - 2) + 2 * pr(i - 1) + 3 * p[2]! + 2 * pr(i + 1) + pr(i + 2)) / 9;
+    if (i === 0 || i === kept.length - 1) return [p[0]!, p[1]!, pressure];
     const a = kept[i - 1]!;
     const b = kept[i + 1]!;
-    return [(a[0]! + 2 * p[0]! + b[0]!) / 4, (a[1]! + 2 * p[1]! + b[1]!) / 4, p[2]!];
+    return [(a[0]! + 2 * p[0]! + b[0]!) / 4, (a[1]! + 2 * p[1]! + b[1]!) / 4, pressure];
   });
 }
 

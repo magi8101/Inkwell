@@ -247,9 +247,21 @@ const osTrailActive = (a: Gesture) =>
 
 let tipBox: { x0: number; y0: number; x1: number; y1: number } | null = null;
 
-function addRaw(a: Gesture, e: PointerEvent) {
-  const evs = e.getCoalescedEvents?.();
-  for (const ev of evs?.length ? evs : [e]) {
+/**
+ * A pointer event's samples in time order with usable pressure. Safari's coalesced events
+ * (iOS 18.2+) are incomplete: they can lack pressure (0) as well as target and pointerId. Treating
+ * that 0 as "unknown → 0.5" made the width jump between 0.5 and the real pressure on every sample,
+ * so fast iPad writing came out as a chain of beads. They inherit the dispatched event's pressure.
+ */
+function samplesOf(e: PointerEvent): { ev: PointerEvent; p: number }[] {
+  const list = e.getCoalescedEvents?.() ?? [];
+  const evs = list.length ? [...list].sort((x, y) => x.timeStamp - y.timeStamp) : [e];
+  const fallback = e.pressure > 0 ? e.pressure : 0.5;
+  return evs.map((ev) => ({ ev, p: ev.pressure > 0 ? ev.pressure : fallback }));
+}
+
+function addRaw(a: Gesture, samples: { ev: PointerEvent; p: number }[]) {
+  for (const { ev, p } of samples) {
     const x = ev.clientX - a.origin.left;
     const y = ev.clientY - a.origin.top;
     const last = a.raw[a.raw.length - 1];
@@ -261,7 +273,7 @@ function addRaw(a: Gesture, e: PointerEvent) {
     ) {
       continue;
     }
-    a.raw.push({ x, y, t: ev.timeStamp, p: ev.pressure || 0.5 });
+    a.raw.push({ x, y, t: ev.timeStamp, p });
   }
   // Trim history, but never a sample that isn't in the stroke yet (it would be lost on lift).
   while (a.raw.length > RAW_HISTORY && a.raw[0]!.seen) a.raw.shift();
@@ -349,16 +361,15 @@ function addPoints(a: Gesture, e: PointerEvent) {
     a.barrel.armed = true; // it's a drag: start erasing from where the press began
     a.last = { ...toWorld(a.barrel.x, a.barrel.y), p: 0.5 };
   }
-  const evs = e.getCoalescedEvents?.();
   const r = state.eraserWidth / 2 / view.scale;
   let changed = false;
-  for (const ev of evs?.length ? evs : [e]) {
+  for (const sample of samplesOf(e)) {
+    const { ev, p: pr } = sample;
     const w = toWorld(ev.clientX, ev.clientY);
-    const pr = ev.pressure || 0.5;
     const prev = a.last;
     a.last = { x: w.x, y: w.y, p: pr };
     if (a.mode === 'ink') {
-      addRaw(a, ev);
+      addRaw(a, [sample]);
       markSeen(a, ev);
       const n = a.points.length;
       if (!n) {
@@ -636,7 +647,7 @@ if (RAW_EVENTS) {
   bg.addEventListener('pointerrawupdate' as 'pointermove', (e) => {
     const a = active;
     if (!a || a.id !== e.pointerId || a.mode !== 'ink' || a.shape || a.barrel) return;
-    addRaw(a, e);
+    addRaw(a, samplesOf(e));
     drawTip(a);
   });
 }

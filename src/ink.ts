@@ -108,7 +108,12 @@ interface Gesture {
   hold: { x: number; y: number; timer: number } | null;
   /** Clean replacement strokes once the hand-drawn one was recognised as a shape. */
   shape: number[][] | null;
+  /** Side-button gesture: does nothing until it moves; a quick still press is a tap (tool ring). */
+  barrel: { x: number; y: number; t: number; armed: boolean } | null;
 }
+
+const BARREL_SLOP_PX = 6;
+const BARREL_TAP_MS = 500;
 
 // Hold the pen still this long at the end of a stroke to snap it into a clean shape.
 const HOLD_MS = 450;
@@ -137,6 +142,11 @@ let active: Gesture | null = null;
 function modeFor(e: PointerEvent): Mode | null {
   // Flipping the Surface Pen to its eraser end always erases.
   if (e.pointerType === 'pen' && (e.button === 5 || e.buttons & 32)) return 'erase';
+  // Side (barrel) button held while touching: erase as you drag; a tap opens the tool ring.
+  if (e.pointerType === 'pen' && (e.button === 2 || e.buttons & 2)) {
+    if (state.tuning.sideButton === 'menu') return null;
+    return state.tuning.sideButton === 'pixelEraser' ? 'cut' : 'erase';
+  }
   if (e.button !== 0) return null;
   if (e.pointerType === 'touch' && (penSeen || isPalm(e) || touchCount() !== 1)) return null;
   if (state.tool === 'pen' || state.tool === 'highlighter') return 'ink';
@@ -166,6 +176,11 @@ function eraseAt(a: Gesture, x: number, y: number, r: number): boolean {
 
 function addPoints(a: Gesture, e: PointerEvent) {
   if (a.shape) return; // snapped: the clean shape stays until the pen lifts
+  if (a.barrel && !a.barrel.armed) {
+    if (Math.hypot(e.clientX - a.barrel.x, e.clientY - a.barrel.y) < BARREL_SLOP_PX) return;
+    a.barrel.armed = true; // it's a drag: start erasing from where the press began
+    a.last = { ...toWorld(a.barrel.x, a.barrel.y), p: 0.5 };
+  }
   const evs = e.getCoalescedEvents?.();
   const r = state.eraserWidth / 2 / view.scale;
   let changed = false;
@@ -296,6 +311,13 @@ function finish(keep: boolean) {
   if (!a) return;
   active = null;
   if (a.hold) clearTimeout(a.hold.timer);
+  if (a.barrel && !a.barrel.armed) {
+    clearLive();
+    if (keep && performance.now() - a.barrel.t < BARREL_TAP_MS) {
+      bg.dispatchEvent(new CustomEvent('barreltap', { detail: { x: a.barrel.x, y: a.barrel.y } }));
+    }
+    return;
+  }
   if (!keep) {
     page().strokes = a.before;
     redraw();
@@ -355,6 +377,10 @@ bg.addEventListener('pointerdown', (e) => {
     last: null,
     hold: null,
     shape: null,
+    barrel:
+      e.pointerType === 'pen' && (e.button === 2 || e.buttons & 2)
+        ? { x: e.clientX, y: e.clientY, t: performance.now(), armed: false }
+        : null,
   };
   addPoints(active, e);
 });

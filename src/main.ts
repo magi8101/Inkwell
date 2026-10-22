@@ -128,7 +128,15 @@ const canvas = document.querySelector<HTMLCanvasElement>('#bg')!;
 let lastDownType = '';
 canvas.addEventListener('pointerdown', (e) => {
   lastDownType = e.pointerType;
-  if (e.pointerType === 'pen' && e.button === 2) openRadial(e.clientX, e.clientY);
+  // 'Menu only' keeps the old behaviour: the ring opens as soon as the side button touches down.
+  if (e.pointerType === 'pen' && e.button === 2 && state.tuning.sideButton === 'menu') {
+    openRadial(e.clientX, e.clientY);
+  }
+});
+// Otherwise a quick, still side-button press is a tap (from ink.ts) and opens the ring there.
+canvas.addEventListener('barreltap', (e) => {
+  const { x, y } = (e as CustomEvent<{ x: number; y: number }>).detail;
+  openRadial(x, y);
 });
 addEventListener('contextmenu', (e) => {
   const t = e.target as HTMLElement;

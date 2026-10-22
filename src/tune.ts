@@ -194,14 +194,10 @@ function panel(): HTMLElement {
     'div',
     { class: 'style-panel tune-panel' },
     h('div', { class: 'panel-title' }, 'Pen feel'),
-    ...rows.map((r) => r.el),
-    ...toggles.map((t) => t.el),
-    side.el,
-    readout,
     h(
       'button',
       {
-        class: 'menu-item',
+        class: 'primary',
         onclick: () => {
           openTuning(); // closes this panel
           openCalibration();
@@ -209,6 +205,10 @@ function panel(): HTMLElement {
       },
       'Calibrate my pen…',
     ),
+    ...rows.map((r) => r.el),
+    ...toggles.map((t) => t.el),
+    side.el,
+    readout,
     h(
       'button',
       {

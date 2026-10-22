@@ -1,6 +1,6 @@
 import { capture } from './dom';
 import { type Background, type Page, page, state, subscribe } from './store';
-import { drawStroke, setRenderTuning } from './stroke';
+import { drawStroke, drawTextBox, setRenderTuning } from './stroke';
 
 const GRID = 32;
 const MIN_ZOOM = 0.1;
@@ -11,6 +11,7 @@ export const view = { x: 0, y: 0, scale: 1 };
 const canvas = document.querySelector<HTMLCanvasElement>('#bg')!;
 const ctx = canvas.getContext('2d', { alpha: false })!;
 const zoomChip = document.querySelector<HTMLButtonElement>('#zoom')!;
+const textLayer = document.querySelector<HTMLDivElement>('#texts')!;
 let rect = canvas.getBoundingClientRect();
 let dpr = devicePixelRatio;
 let queued = false;
@@ -65,6 +66,7 @@ export function drawPage(
   p: Page,
   v: { x: number; y: number; scale: number },
   px = 1,
+  withText = true,
 ) {
   const color = pageColor(p.pageColor);
   drawBackground(c, w, h, p.background, color, v, px);
@@ -74,6 +76,7 @@ export function drawPage(
   // Highlighter sits under pen ink, like a real highlighter on paper.
   for (const s of p.strokes) if (s.tool === 'highlighter') drawStroke(c, s, dark);
   for (const s of p.strokes) if (s.tool !== 'highlighter') drawStroke(c, s, dark);
+  if (withText) for (const t of p.texts) drawTextBox(c, t, dark);
   c.restore();
 }
 
@@ -93,7 +96,9 @@ function render() {
     page(),
     { x: view.x * dpr, y: view.y * dpr, scale: view.scale * dpr },
     dpr,
+    false, // the live page shows text as editable boxes instead
   );
+  textLayer.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
   zoomChip.textContent = `${Math.round(view.scale * 100)}%`;
 }
 

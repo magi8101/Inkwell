@@ -761,6 +761,129 @@ button:disabled {
   user-select: text;
 }
 
+/* ---------- Text boxes ---------- */
+
+#texts {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.tbox {
+  position: absolute;
+  line-height: 1.3;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+body[data-tool="text"] .tbox {
+  pointer-events: auto;
+  cursor: move;
+}
+
+.tbox-body {
+  min-height: 1.3em;
+  outline: none;
+}
+
+.tbox.editing .tbox-body {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.tbox.editing .tbox-body:empty::before {
+  content: "Type here…";
+  opacity: 0.4;
+}
+
+.tbox.selected {
+  outline: 2px dashed var(--accent);
+  outline-offset: 6px;
+}
+
+.tbox.editing {
+  outline-style: solid;
+}
+
+.tbox-resize {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: -14px;
+  bottom: 0;
+  width: 14px;
+  cursor: ew-resize;
+}
+
+.tbox.selected .tbox-resize {
+  display: block;
+}
+
+.tbox-resize::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 6px;
+  height: 24px;
+  margin-top: -12px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.textbar {
+  position: fixed;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.textbar .fonts {
+  grid-template-columns: repeat(4, auto);
+}
+
+.textbar .seg {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.textbar .size {
+  display: flex;
+  align-items: center;
+}
+
+.textbar .size output {
+  min-width: 28px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.textbar .colors {
+  display: flex;
+  gap: 4px;
+}
+
+.textbar .pal {
+  width: 26px;
+  min-height: 26px;
+}
+
+.tb-btn.danger {
+  color: var(--danger);
+}
+
 /* ---------- Tuning panel & toast ---------- */
 
 .tune-panel {

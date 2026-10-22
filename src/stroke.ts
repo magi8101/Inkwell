@@ -156,3 +156,60 @@ export function cut(s: Stroke, x: number, y: number, r: number, newId: () => str
   end();
   return runs.map((points) => ({ ...s, id: newId(), points }));
 }
+
+// --- Text boxes on canvas (thumbnails and exports; the live page uses editable DOM boxes). ---
+
+export const FONTS = {
+  sans: { label: 'Sans', css: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif' },
+  serif: { label: 'Serif', css: 'Cambria, Georgia, "Times New Roman", serif' },
+  mono: { label: 'Mono', css: '"Cascadia Mono", Consolas, ui-monospace, monospace' },
+  hand: { label: 'Hand', css: '"Ink Free", "Segoe Print", "Comic Sans MS", cursive' },
+} as const;
+export const LINE_HEIGHT = 1.3;
+
+type TextLike = {
+  x: number;
+  y: number;
+  w: number;
+  text: string;
+  font: keyof typeof FONTS;
+  size: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+};
+
+export const fontCss = (t: TextLike) =>
+  `${t.italic ? 'italic ' : ''}${t.bold ? 700 : 400} ${t.size}px ${FONTS[t.font].css}`;
+
+/** Word-wraps text to the box width the same way the editable box does (pre-wrap). */
+export function wrapLines(t: TextLike, measure: (s: string) => number): string[] {
+  const out: string[] = [];
+  for (const para of t.text.split('\n')) {
+    let line = '';
+    for (const word of para.split(/(\s+)/)) {
+      const next = line + word;
+      if (line && measure(next.trimEnd()) > t.w) {
+        out.push(line.trimEnd());
+        line = word.trimStart();
+      } else {
+        line = next;
+      }
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+export function drawTextBox(ctx: CanvasRenderingContext2D, t: TextLike, dark: boolean) {
+  ctx.globalAlpha = 1;
+  ctx.font = fontCss(t);
+  ctx.fillStyle = inkColor(t.color, dark);
+  ctx.textBaseline = 'top';
+  const lh = t.size * LINE_HEIGHT;
+  // Centre each line in its line box like CSS does.
+  const pad = (lh - t.size) / 2;
+  wrapLines(t, (s) => ctx.measureText(s).width).forEach((line, i) => {
+    ctx.fillText(line, t.x, t.y + pad + i * lh);
+  });
+}

@@ -21,10 +21,26 @@ export interface Stroke {
   /** Flat world-space [x, y, pressure, x, y, pressure, ...]. Strokes are never mutated. */
   points: number[];
 }
+export type TextFont = 'sans' | 'serif' | 'mono' | 'hand';
+export interface TextBox {
+  id: string;
+  /** World-space top-left corner and wrap width. */
+  x: number;
+  y: number;
+  w: number;
+  text: string;
+  font: TextFont;
+  /** Font size in world px. */
+  size: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+}
 export interface Page {
   id: string;
   title: string;
   strokes: Stroke[];
+  texts: TextBox[];
   background: Background;
   /** Hex, or 'auto' to follow the theme. */
   pageColor: string;
@@ -111,6 +127,7 @@ export const newPage = (title = 'Untitled page'): Page => ({
   id: uid(),
   title,
   strokes: [],
+  texts: [],
   background: 'blank',
   pageColor: 'auto',
 });
@@ -239,7 +256,11 @@ systemDark.addEventListener('change', () => update(() => {}));
 function fixSelection(s: State) {
   if (!s.notebooks.length) s.notebooks.push(newNotebook('My Notebook'));
   for (const n of s.notebooks)
-    for (const x of n.sections) for (const p of x.pages) p.strokes ??= [];
+    for (const x of n.sections)
+      for (const p of x.pages) {
+        p.strokes ??= [];
+        p.texts ??= [];
+      }
   const nb = s.notebooks.find((n) => n.id === s.notebookId) ?? s.notebooks[0]!;
   s.notebookId = nb.id;
   if (!nb.sections.length) nb.sections.push(newSection('Quick Notes'));

@@ -374,7 +374,8 @@ function results(q: string): HTMLElement[] {
   for (const nb of state.notebooks) {
     for (const sec of nb.sections) {
       for (const p of sec.pages) {
-        if (![p.title, sec.name, nb.name].some((t) => t.toLowerCase().includes(needle))) continue;
+        const haystack = [p.title, sec.name, nb.name, ...p.texts.map((t) => t.text)];
+        if (!haystack.some((t) => t.toLowerCase().includes(needle))) continue;
         hits.push(
           h(
             'button',

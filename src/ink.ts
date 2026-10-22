@@ -1,6 +1,6 @@
 import { capture } from './dom';
 import { densify, recognize } from './shape';
-import { inkTool, page, type Stroke, state, subscribe, uid, update } from './store';
+import { inkTool, page, type Stroke, state, subscribe, type TextBox, uid, update } from './store';
 import { cut, hits, inkColor, outline } from './stroke';
 import { isPalm, pageIsDark, penSeen, redraw, touchCount, toWorld, view } from './viewport';
 
@@ -32,8 +32,13 @@ let presenter: InkPresenter | null = null;
   () => {},
 );
 
-// --- Undo/redo: each entry is the page's whole stroke list (strokes are immutable, so it's cheap). ---
-const history = new Map<string, { undo: Stroke[][]; redo: Stroke[][] }>();
+// --- Undo/redo: each entry is a snapshot of the page's strokes and text boxes. Both lists are
+// replaced, never mutated, so a snapshot is just two array references. ---
+export interface Snapshot {
+  strokes: Stroke[];
+  texts: TextBox[];
+}
+const history = new Map<string, { undo: Snapshot[]; redo: Snapshot[] }>();
 function stacks() {
   let h = history.get(page().id);
   if (!h) {
@@ -47,36 +52,42 @@ export const lowLatencyCanvas = () => ctx.getContextAttributes().desynchronized 
 
 export const canUndo = () => stacks().undo.length > 0;
 export const canRedo = () => stacks().redo.length > 0;
+export const snapshot = (): Snapshot => ({ strokes: page().strokes, texts: page().texts });
 
-function commit(before: Stroke[], after: Stroke[]) {
-  if (before === after) return;
+function restore(s: Snapshot) {
+  update(() => {
+    page().strokes = s.strokes;
+    page().texts = s.texts;
+  });
+}
+
+/** Records `before` for undo and makes `after` the page content. */
+export function commitSnapshot(before: Snapshot, after: Snapshot) {
+  if (before.strokes === after.strokes && before.texts === after.texts) return;
   const h = stacks();
   h.undo.push(before);
   if (h.undo.length > MAX_HISTORY) h.undo.shift();
   h.redo = [];
-  update(() => {
-    page().strokes = after;
-  });
+  restore(after);
 }
+
+const commit = (before: Stroke[], after: Stroke[]) =>
+  commitSnapshot({ strokes: before, texts: page().texts }, { strokes: after, texts: page().texts });
 
 export function undo() {
   const h = stacks();
   const prev = h.undo.pop();
   if (!prev) return;
-  h.redo.push(page().strokes);
-  update(() => {
-    page().strokes = prev;
-  });
+  h.redo.push(snapshot());
+  restore(prev);
 }
 
 export function redo() {
   const h = stacks();
   const next = h.redo.pop();
   if (!next) return;
-  h.undo.push(page().strokes);
-  update(() => {
-    page().strokes = next;
-  });
+  h.undo.push(snapshot());
+  restore(next);
 }
 
 // --- Drawing ---

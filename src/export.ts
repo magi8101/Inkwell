@@ -66,13 +66,29 @@ const rgbOf = (hex: string) => {
 const fileName = (name: string, ext: string) =>
   `${name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Inkwell'}.${ext}`;
 
-function download(blob: Blob, name: string) {
+/** Running inside the Tauri desktop app (any OS)? */
+const IN_DESKTOP_APP = '__TAURI_INTERNALS__' in window;
+
+/**
+ * Hands the file to the user. Browsers download it; the desktop app's webviews don't reliably
+ * honour download links, so there it goes to a Rust command that shows the native "Save as"
+ * dialog. Returns false if the user cancelled.
+ */
+async function download(blob: Blob, name: string): Promise<boolean> {
+  if (IN_DESKTOP_APP) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    return invoke<boolean>('save_export', bytes, {
+      headers: { 'x-file-name': encodeURIComponent(name) },
+    });
+  }
   const url = URL.createObjectURL(blob);
   const a = h('a', { href: url, download: name });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return true;
 }
 
 // --- PNG: the page rendered by the same code that draws the canvas ---
@@ -91,7 +107,7 @@ async function exportPng(p: Page, paper: boolean) {
   drawPage(c.getContext('2d')!, c.width, c.height, target, v, PNG_SCALE);
   const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
   if (!blob) throw new Error('Could not encode PNG');
-  download(blob, fileName(p.title, 'png'));
+  return download(blob, fileName(p.title, 'png'));
 }
 
 // --- PDF: vector strokes via SVG paths, text with the standard PDF fonts ---
@@ -189,7 +205,7 @@ async function exportPdf(pages: Page[], size: Size, paper: boolean, name: string
     }
   }
   const bytes = await doc.save();
-  download(new Blob([bytes.slice()], { type: 'application/pdf' }), fileName(name, 'pdf'));
+  return download(new Blob([bytes.slice()], { type: 'application/pdf' }), fileName(name, 'pdf'));
 }
 
 /** Grid, dots or ruled lines across the whole sheet, aligned to the page's world grid. */
@@ -345,7 +361,8 @@ function panel(): HTMLElement {
     go.disabled = true;
     go.textContent = 'Exporting…';
     try {
-      if (format === 'png') await exportPng(page(), paper);
+      let saved: boolean;
+      if (format === 'png') saved = await exportPng(page(), paper);
       else {
         const all = notebook().sections.flatMap((s) => s.pages);
         const pages =
@@ -358,9 +375,14 @@ function panel(): HTMLElement {
           toast('Choose at least one page.', 2500);
           return;
         }
-        await exportPdf(pages, size, paper, scope === 'page' ? page().title : notebook().name);
+        saved = await exportPdf(
+          pages,
+          size,
+          paper,
+          scope === 'page' ? page().title : notebook().name,
+        );
       }
-      toast('Exported — check your Downloads folder.', 3000);
+      if (saved) toast(IN_DESKTOP_APP ? 'Saved.' : 'Exported — check your Downloads folder.', 3000);
     } catch (e) {
       console.error(e);
       const msg = e instanceof Error ? e.message : String(e);

@@ -1,6 +1,7 @@
-import { capture } from './dom';
+import { Locate, Maximize, Scan, ZoomIn, ZoomOut } from 'lucide';
+import { capture, h, icon, openMenu } from './dom';
 import { type Background, type Page, page, state, subscribe } from './store';
-import { drawStroke, drawTextBox, setRenderTuning } from './stroke';
+import { bbox as bboxOf, drawStroke, drawTextBox, setRenderTuning } from './stroke';
 
 const GRID = 32;
 const MIN_ZOOM = 0.1;
@@ -100,6 +101,7 @@ function render() {
   );
   textLayer.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
   zoomChip.textContent = `${Math.round(view.scale * 100)}%`;
+  updateLost();
 }
 
 export function redraw() {
@@ -121,10 +123,119 @@ function zoomAt(cx: number, cy: number, factor: number) {
 export const zoomBy = (f: number) => zoomAt(rect.width / 2, rect.height / 2, f);
 
 export function resetView() {
+  cancelAnimationFrame(anim);
   view.x = 0;
   view.y = 0;
   view.scale = 1;
   redraw();
+}
+
+// --- Smooth view moves, fit to content, and "back to your notes" ---
+
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let anim = 0;
+
+function animateTo(target: { x: number; y: number; scale: number }, ms = 320) {
+  cancelAnimationFrame(anim);
+  if (reducedMotion.matches) {
+    Object.assign(view, target);
+    redraw();
+    return;
+  }
+  const from = { ...view };
+  const start = performance.now();
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / ms);
+    const k = 1 - (1 - t) ** 3; // ease-out
+    // Interpolate zoom in log space so it feels even at every scale.
+    const scale = from.scale * (target.scale / from.scale) ** k;
+    const mid = (a: number, b: number) => a + (b - a) * k;
+    view.scale = scale;
+    view.x = mid(from.x, target.x);
+    view.y = mid(from.y, target.y);
+    render();
+    if (t < 1) anim = requestAnimationFrame(step);
+  };
+  anim = requestAnimationFrame(step);
+}
+
+const boxCache = new WeakMap<Page['strokes'], { texts: Page['texts']; box: number[] | null }>();
+/** World-space box around the page's ink and text, or null for an empty page. */
+function contentBox(p: Page): number[] | null {
+  const hit = boxCache.get(p.strokes);
+  if (hit && hit.texts === p.texts) return hit.box;
+  let b: number[] | null = null;
+  const grow = (x0: number, y0: number, x1: number, y1: number) => {
+    b = b
+      ? [Math.min(b[0]!, x0), Math.min(b[1]!, y0), Math.max(b[2]!, x1), Math.max(b[3]!, y1)]
+      : [x0, y0, x1, y1];
+  };
+  for (const s of p.strokes) {
+    const k = bboxOf(s);
+    grow(k[0], k[1], k[2], k[3]);
+  }
+  // Text height is approximate (explicit lines only); good enough to frame it.
+  for (const t of p.texts)
+    grow(t.x, t.y, t.x + t.w, t.y + t.text.split('\n').length * t.size * 1.3);
+  boxCache.set(p.strokes, { texts: p.texts, box: b });
+  return b;
+}
+
+const FIT_PAD = 56;
+const FIT_MAX_ZOOM = 2;
+
+export function fitContent() {
+  const b = contentBox(page());
+  if (!b) {
+    animateTo({ x: 0, y: 0, scale: 1 });
+    return;
+  }
+  const w = Math.max(1, b[2]! - b[0]!);
+  const hgt = Math.max(1, b[3]! - b[1]!);
+  const scale = Math.min(
+    FIT_MAX_ZOOM,
+    Math.max(MIN_ZOOM, Math.min((rect.width - FIT_PAD * 2) / w, (rect.height - FIT_PAD * 2) / hgt)),
+  );
+  animateTo({
+    x: rect.width / 2 - (b[0]! + w / 2) * scale,
+    y: rect.height / 2 - (b[1]! + hgt / 2) * scale,
+    scale,
+  });
+}
+
+export const actualSize = () => {
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  animateTo({
+    x: cx - ((cx - view.x) / view.scale) * 1,
+    y: cy - ((cy - view.y) / view.scale) * 1,
+    scale: 1,
+  });
+};
+
+const lostBtn = h(
+  'button',
+  {
+    class: 'chip lost',
+    hidden: true,
+    title: 'Zoom to fit your notes (Shift+1)',
+    onclick: fitContent,
+  },
+  icon(Locate, 16),
+  h('span', {}, 'Back to your notes'),
+);
+canvas.parentElement!.append(lostBtn);
+
+/** Shows the button only when the page has content and none of it is on screen. */
+function updateLost() {
+  const b = contentBox(page());
+  const off =
+    !!b &&
+    (b[2]! * view.scale + view.x < 0 ||
+      b[0]! * view.scale + view.x > rect.width ||
+      b[3]! * view.scale + view.y < 0 ||
+      b[1]! * view.scale + view.y > rect.height);
+  lostBtn.hidden = !off;
 }
 
 new ResizeObserver(() => {
@@ -301,7 +412,14 @@ canvas.addEventListener(
   { passive: false },
 );
 
-zoomChip.addEventListener('click', resetView);
+zoomChip.addEventListener('click', () =>
+  openMenu(zoomChip, [
+    { label: 'Fit to content (Shift+1)', icon: Maximize, run: fitContent },
+    { label: 'Actual size (Ctrl+0)', icon: Scan, run: actualSize },
+    { label: 'Zoom in (Ctrl+=)', icon: ZoomIn, run: () => zoomBy(1.25) },
+    { label: 'Zoom out (Ctrl+-)', icon: ZoomOut, run: () => zoomBy(0.8) },
+  ]),
+);
 
 let shownPage = '';
 subscribe(() => {

@@ -293,6 +293,21 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.chip.lost {
+  left: 50%;
+  right: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  color: var(--accent-text);
+  font-weight: 600;
+  translate: -50% 0;
+  animation: pop-in 180ms var(--ease);
+}
+
 /* ---------- Popovers & menus ---------- */
 
 .popover {

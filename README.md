@@ -35,6 +35,7 @@ npm run format     # auto-fix formatting
 - **Pen feel panel** (gauge button, Ctrl+Shift+D): smoothing, pressure, pressure curve, palm size and pen grace time, plus live pressure/contact/sample-rate readings to tune on your own device.
 - **Pen side button:** tap it for the tool and colour ring at the pen tip; hold it and drag to erase (pixel erase or menu-only in the Pen feel panel). Right-click also opens the ring.
 - **Finger taps:** tap with two fingers to undo, three to redo (single taps; palms, slow or moving taps and taps right after the pen are ignored). If three-finger taps open Windows search instead, turn off _Settings → Bluetooth & devices → Touch → Three- and four-finger touch gestures_.
+- **Lost on the canvas?** A _Back to your notes_ button appears whenever nothing on the page is on screen; Shift+1 (or the zoom chip menu) fits everything, Ctrl+0 returns to 100%.
 - **Laser pointer (K):** a glowing red trail for presenting that fades from its tail after about a second; hovering shows the red dot. Never saved, never in undo.
 - **Shapes:** draw a line, arrow, triangle, rectangle, circle or ellipse and hold the pen still for half a second to snap it clean (toggle with S).
 - **Ruler (R):** straight lines that snap to 15° steps (always with Shift), with a live length/angle readout.

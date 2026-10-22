@@ -11,7 +11,7 @@ import './laser';
 import './text';
 import { setTool } from './toolbar';
 import { openTuning, tuneButton } from './tune';
-import { penNear, resetView, zoomBy } from './viewport';
+import { actualSize, fitContent, penNear, zoomBy } from './viewport';
 
 // --- Corner controls: page style and theme ---
 const BACKGROUNDS: { id: Background; label: string; icon: typeof Square }[] = [
@@ -178,7 +178,7 @@ addEventListener('keydown', (e) => {
       y: redo,
       D: openTuning,
       e: openExport,
-      '0': resetView,
+      '0': actualSize,
       '=': () => zoomBy(1.25),
       '+': () => zoomBy(1.25),
       '-': () => zoomBy(0.8),
@@ -190,7 +190,10 @@ addEventListener('keydown', (e) => {
     }
     return;
   }
-  if (e.key === 'Tab' && target === document.body) {
+  if (e.shiftKey && e.code === 'Digit1') {
+    e.preventDefault();
+    fitContent();
+  } else if (e.key === 'Tab' && target === document.body) {
     e.preventDefault();
     update((s) => {
       s.toolbar.collapsed = !s.toolbar.collapsed;

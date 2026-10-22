@@ -22,7 +22,7 @@ import {
   Trash2,
 } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
-import { imagesVersion, onImageLoaded } from './images';
+import { imageBox, imagesVersion, onImageLoaded } from './images';
 import {
   childFolders,
   folderPath,
@@ -285,15 +285,14 @@ function thumb(p: Page): HTMLCanvasElement {
   c.width = 72 * dpr;
   c.height = 52 * dpr;
   let v = { x: 4 * dpr, y: 4 * dpr, scale: 0.3 * dpr };
-  if (p.strokes.length) {
-    const b = p.strokes
-      .map(bbox)
-      .reduce((a, k) => [
-        Math.min(a[0], k[0]),
-        Math.min(a[1], k[1]),
-        Math.max(a[2], k[2]),
-        Math.max(a[3], k[3]),
-      ]);
+  if (p.strokes.length || p.images.length) {
+    // Ink and pictures (a PDF page is a picture) together.
+    const b = [...p.strokes.map(bbox), ...p.images.map(imageBox)].reduce((a, k) => [
+      Math.min(a[0], k[0]),
+      Math.min(a[1], k[1]),
+      Math.max(a[2], k[2]),
+      Math.max(a[3], k[3]),
+    ]);
     const scale = Math.min(0.3, 64 / (b[2] - b[0] || 1), 44 / (b[3] - b[1] || 1)) * dpr;
     v = {
       x: (c.width - (b[2] - b[0]) * scale) / 2 - b[0] * scale,

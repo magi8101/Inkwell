@@ -1,8 +1,9 @@
-import { ClipboardPaste, ImagePlus, Images, NotebookText } from 'lucide';
+import { ClipboardPaste, FileText, ImagePlus, Images, NotebookText } from 'lucide';
 import { h, icon, openMenu, toast } from './dom';
 import { storePicture } from './images';
 import { insert, takeOverPaste } from './lasso';
 import { importOneNote } from './onenote';
+import { importPdf } from './pdf-import';
 import { type ImageItem, uid } from './store';
 import { toWorld, view } from './viewport';
 
@@ -60,6 +61,18 @@ oneInput.addEventListener('change', async () => {
   oneInput.value = '';
 });
 const isOneNote = (f: File) => /\.one$/i.test(f.name);
+const isPdf = (f: File) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+const pdfInput = h('input', {
+  type: 'file',
+  accept: 'application/pdf,.pdf',
+  multiple: true,
+  hidden: true,
+});
+document.body.append(pdfInput);
+pdfInput.addEventListener('change', async () => {
+  for (const f of [...(pdfInput.files ?? [])]) await importPdf(f);
+  pdfInput.value = '';
+});
 document.body.append(input);
 input.addEventListener('change', () => {
   void addPictures([...(input.files ?? [])], centre());
@@ -95,6 +108,7 @@ insertButton.addEventListener('click', () =>
     { label: 'Picture from files…', icon: Images, run: () => input.click() },
     { label: 'Paste picture', icon: ClipboardPaste, run: () => void pasteFromClipboard() },
     'sep',
+    { label: 'PDF (to write on)…', icon: FileText, run: () => pdfInput.click() },
     { label: 'OneNote section (.one)…', icon: NotebookText, run: () => oneInput.click() },
   ]),
 );
@@ -112,7 +126,8 @@ stage.addEventListener('drop', (e) => {
   e.preventDefault();
   void (async () => {
     for (const f of files.filter(isOneNote)) await importOneNote(f);
-    const pictures = files.filter((f) => !isOneNote(f));
+    for (const f of files.filter(isPdf)) await importPdf(f);
+    const pictures = files.filter((f) => !isOneNote(f) && !isPdf(f));
     if (pictures.length) await addPictures(pictures, toWorld(e.clientX, e.clientY));
   })();
 });

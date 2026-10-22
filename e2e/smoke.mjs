@@ -443,6 +443,33 @@ async function suite() {
   gripDrag(stageBox.left + 400, stageBox.top + 200);
   await wait(200);
   R.toolbarFloatsAgain = !tb.classList.contains('vertical');
+  // PDF import: a two-page PDF dropped on the page becomes a folder of two pages to write on.
+  {
+    // A minimal valid PDF, written by hand: two blank 300×200 pt pages.
+    const minimal = (n) => {
+      const objs = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${Array.from({ length: n }, (_, i) => `${3 + i} 0 R`).join(' ')}] /Count ${n} >>`];
+      for (let i = 0; i < n; i++) objs.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] >>');
+      let out = '%PDF-1.4\n';
+      const offs = [];
+      objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+      const xref = out.length;
+      out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+      return new TextEncoder().encode(out);
+    };
+    const bytes = minimal(2);
+    const dtp = new DataTransfer();
+    dtp.items.add(new File([bytes], 'Lecture 5.pdf', { type: 'application/pdf' }));
+    document.querySelector('#stage').dispatchEvent(new DragEvent('drop', { clientX: 600, clientY: 400, dataTransfer: dtp, bubbles: true, cancelable: true }));
+    let folder = null;
+    for (let i = 0; i < 40 && !folder; i++) {
+      await wait(250);
+      folder = (await stored()).notebooks[0].sections.find((x) => x.name === 'Lecture 5');
+    }
+    R.pdfImportPages = !!folder && folder.pages.length === 2 && folder.pages.every((p) => p.images.length === 1);
+    R.pdfImportSize = !!folder && Math.round(folder.pages[0].images[0].w) === 400 && Math.round(folder.pages[0].images[0].h) === 267;
+    document.querySelector('.row.section').click(); // back to an ordinary page
+    await wait(400);
+  }
   // Pen calibration: run every step with synthetic pen/touch input, apply, and share the report.
   btn('Pen feel and palm settings').click();
   await wait(100);

@@ -191,7 +191,9 @@ async function suite() {
   );
   await wait(800);
   const imgs = (await pg()).images;
-  R.pictureInserted = imgs.length === 1 && Math.round(imgs[0].w) === 400;
+  // Natural size (400×200), shrunk to fit smaller screens (iPad) but never stretched or distorted.
+  R.pictureInserted =
+    imgs.length === 1 && imgs[0].w <= 400 && imgs[0].w > 200 && Math.abs(imgs[0].w / imgs[0].h - 2) < 0.01;
   R.pictureSelected = !document.querySelector('.sel-frame').hidden;
   const blobCount = await new Promise((resolve) => {
     const req = indexedDB.open('inkwell');

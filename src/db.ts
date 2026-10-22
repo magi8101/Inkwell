@@ -45,6 +45,14 @@ async function run<T>(
 export const kvGet = <T>(key: string) => run<T | undefined>('kv', 'readonly', (s) => s.get(key));
 export const kvPut = (key: string, value: unknown) =>
   run('kv', 'readwrite', (s) => s.put(value, key));
-export const blobGet = (id: string) => run<Blob | undefined>('blobs', 'readonly', (s) => s.get(id));
-export const blobPut = (id: string, blob: Blob) =>
-  run('blobs', 'readwrite', (s) => s.put(blob, id));
+// Files are stored as bytes + type, not as Blobs: WebKit refuses Blobs in some contexts (Safari
+// private browsing, some webviews: "Error preparing Blob/File data"). Blobs saved before still read.
+type Stored = Blob | { type: string; data: ArrayBuffer };
+export const blobGet = async (id: string) => {
+  const v = await run<Stored | undefined>('blobs', 'readonly', (s) => s.get(id));
+  return v && !(v instanceof Blob) ? new Blob([v.data], { type: v.type }) : v;
+};
+export const blobPut = async (id: string, blob: Blob) => {
+  const data = await blob.arrayBuffer();
+  return run('blobs', 'readwrite', (s) => s.put({ type: blob.type, data }, id));
+};

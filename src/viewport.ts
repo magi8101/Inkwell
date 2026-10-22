@@ -1,14 +1,50 @@
-import { Locate, Maximize, Scan, ZoomIn, ZoomOut } from 'lucide';
+import { Locate, Lock, LockOpen, Maximize, RotateCcw, Scan, ZoomIn, ZoomOut } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
 import { drawImages, imageBox, onImageLoaded } from './images';
-import { type Background, type Page, page, state, subscribe } from './store';
+import { type Background, type Page, page, state, subscribe, update } from './store';
 import { bbox as bboxOf, drawStroke, drawTextBox, setRenderTuning } from './stroke';
 
 const GRID = 32;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 8;
 
-export const view = { x: 0, y: 0, scale: 1 };
+/** Page → screen: scale, then turn by `angle` (radians), then move by (x, y). */
+export const view = { x: 0, y: 0, scale: 1, angle: 0 };
+type View = { x: number; y: number; scale: number; angle?: number };
+
+/** The view as a canvas transform, optionally times `k` (device pixels). */
+export function viewMatrix(
+  k = 1,
+  v: View = view,
+): [number, number, number, number, number, number] {
+  const a = v.angle ?? 0;
+  const cos = Math.cos(a) * v.scale * k;
+  const sin = Math.sin(a) * v.scale * k;
+  return [cos, sin, -sin, cos, v.x * k, v.y * k];
+}
+/** A page point on screen, relative to the canvas. */
+export function toScreen(x: number, y: number) {
+  const [a, b, c, d, e, f] = viewMatrix();
+  return { x: a * x + c * y + e, y: b * x + d * y + f };
+}
+/** A point relative to the canvas, on the page. */
+export function localToWorld(sx: number, sy: number) {
+  const dx = sx - view.x;
+  const dy = sy - view.y;
+  const cos = Math.cos(view.angle);
+  const sin = Math.sin(view.angle);
+  return { x: (cos * dx + sin * dy) / view.scale, y: (-sin * dx + cos * dy) / view.scale };
+}
+/** Screen box (relative to the canvas) around a page-space box, rotated or not. */
+export function screenBox(x0: number, y0: number, x1: number, y1: number) {
+  const pts = [toScreen(x0, y0), toScreen(x1, y0), toScreen(x0, y1), toScreen(x1, y1)];
+  return {
+    x0: Math.min(...pts.map((p) => p.x)),
+    y0: Math.min(...pts.map((p) => p.y)),
+    x1: Math.max(...pts.map((p) => p.x)),
+    y1: Math.max(...pts.map((p) => p.y)),
+  };
+}
 
 const canvas = document.querySelector<HTMLCanvasElement>('#bg')!;
 const ctx = canvas.getContext('2d', { alpha: false })!;
@@ -30,8 +66,6 @@ export function isDark(hex: string): boolean {
   return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 128;
 }
 
-const mod = (a: number, b: number) => ((a % b) + b) % b;
-
 /** Paints the page colour and pattern. All values are in device pixels. */
 export function drawBackground(
   c: CanvasRenderingContext2D,
@@ -39,7 +73,7 @@ export function drawBackground(
   h: number,
   bg: Background,
   color: string,
-  v: { x: number; y: number; scale: number },
+  v: View,
   px = 1,
 ) {
   c.fillStyle = color;
@@ -48,17 +82,42 @@ export function drawBackground(
   let step = GRID * v.scale;
   while (step < 12 * px) step *= 2; // drop detail when zoomed far out
   c.fillStyle = isDark(color) ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.12)';
-  const ox = mod(v.x, step);
-  const oy = mod(v.y, step);
+  // Drawn in the page's own direction (turned with the view), over the part that's on screen:
+  // the screen's corners, turned back, give the range to fill.
+  const angle = v.angle ?? 0;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const back = ([x, y]: number[]) => [
+    cos * (x! - v.x) + sin * (y! - v.y),
+    -sin * (x! - v.x) + cos * (y! - v.y),
+  ];
+  const corners = [
+    [0, 0],
+    [w, 0],
+    [0, h],
+    [w, h],
+  ].map(back);
+  const u0 = Math.min(...corners.map((p) => p[0]!));
+  const u1 = Math.max(...corners.map((p) => p[0]!));
+  const w0 = Math.min(...corners.map((p) => p[1]!));
+  const w1 = Math.max(...corners.map((p) => p[1]!));
+  const first = (a: number) => Math.floor(a / step) * step;
+  c.save();
+  c.setTransform(cos, sin, -sin, cos, v.x, v.y);
+  const snap = angle ? (n: number) => n : Math.round; // crisp lines when straight
   if (bg === 'dots') {
     const r = Math.max(px, Math.min(2.5 * px, 1.5 * v.scale));
-    for (let y = oy; y < h; y += step) {
-      for (let x = ox; x < w; x += step) c.fillRect(x - r / 2, y - r / 2, r, r);
+    for (let y = first(w0); y < w1 + step; y += step) {
+      for (let x = first(u0); x < u1 + step; x += step) c.fillRect(x - r / 2, y - r / 2, r, r);
     }
-    return;
+  } else {
+    for (let y = first(w0); y < w1 + step; y += step)
+      c.fillRect(u0, snap(y + v.y) - v.y, u1 - u0, px);
+    if (bg === 'grid')
+      for (let x = first(u0); x < u1 + step; x += step)
+        c.fillRect(snap(x + v.x) - v.x, w0, px, w1 - w0);
   }
-  for (let y = oy; y < h; y += step) c.fillRect(0, Math.round(y), w, px);
-  if (bg === 'grid') for (let x = ox; x < w; x += step) c.fillRect(Math.round(x), 0, px, h);
+  c.restore();
 }
 
 /** Background plus every stroke, for the main canvas and for thumbnails. */
@@ -67,14 +126,14 @@ export function drawPage(
   w: number,
   h: number,
   p: Page,
-  v: { x: number; y: number; scale: number },
+  v: View,
   px = 1,
   withText = true,
 ) {
   const color = pageColor(p.pageColor);
   drawBackground(c, w, h, p.background, color, v, px);
   c.save();
-  c.setTransform(v.scale, 0, 0, v.scale, v.x, v.y);
+  c.setTransform(...viewMatrix(1, v));
   const dark = isDark(color);
   drawImages(c, p.images); // pictures sit under all ink, like printouts on paper
   // Highlighter sits under pen ink, like a real highlighter on paper.
@@ -86,10 +145,8 @@ export function drawPage(
 
 export const pageIsDark = () => isDark(pageColor(page().pageColor));
 
-export const toWorld = (clientX: number, clientY: number) => ({
-  x: (clientX - rect.left - view.x) / view.scale,
-  y: (clientY - rect.top - view.y) / view.scale,
-});
+export const toWorld = (clientX: number, clientY: number) =>
+  localToWorld(clientX - rect.left, clientY - rect.top);
 
 function render() {
   queued = false;
@@ -98,12 +155,15 @@ function render() {
     canvas.width,
     canvas.height,
     page(),
-    { x: view.x * dpr, y: view.y * dpr, scale: view.scale * dpr },
+    { x: view.x * dpr, y: view.y * dpr, scale: view.scale * dpr, angle: view.angle },
     dpr,
     false, // the live page shows text as editable boxes instead
   );
-  textLayer.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+  textLayer.style.transform = `translate(${view.x}px, ${view.y}px) rotate(${view.angle}rad) scale(${view.scale})`;
+  const deg = Math.round((view.angle * 180) / Math.PI);
   zoomChip.textContent = `${Math.round(view.scale * 100)}%`;
+  zoomChip.title = deg ? `Zoom options · page turned ${deg}°` : 'Zoom options';
+  zoomChip.classList.toggle('turned', deg !== 0);
   updateLost();
 }
 
@@ -125,11 +185,29 @@ function zoomAt(cx: number, cy: number, factor: number) {
 
 export const zoomBy = (f: number) => zoomAt(rect.width / 2, rect.height / 2, f);
 
+/** Turns the page by `da` radians around a screen point. */
+function rotateAt(cx: number, cy: number, da: number) {
+  const cos = Math.cos(da);
+  const sin = Math.sin(da);
+  const dx = view.x - cx;
+  const dy = view.y - cy;
+  view.x = cx + cos * dx - sin * dy;
+  view.y = cy + sin * dx + cos * dy;
+  view.angle = Math.atan2(Math.sin(view.angle + da), Math.cos(view.angle + da));
+  redraw();
+}
+
+/** Back to upright, turning around the middle of the screen. */
+export function resetRotation() {
+  rotateAt(rect.width / 2, rect.height / 2, -view.angle);
+}
+
 export function resetView() {
   cancelAnimationFrame(anim);
   view.x = 0;
   view.y = 0;
   view.scale = 1;
+  view.angle = 0;
   redraw();
 }
 
@@ -138,7 +216,8 @@ export function resetView() {
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let anim = 0;
 
-function animateTo(target: { x: number; y: number; scale: number }, ms = 320) {
+function animateTo(target: { x: number; y: number; scale: number; angle?: number }, ms = 320) {
+  target.angle ??= 0;
   cancelAnimationFrame(anim);
   if (reducedMotion.matches) {
     Object.assign(view, target);
@@ -156,6 +235,7 @@ function animateTo(target: { x: number; y: number; scale: number }, ms = 320) {
     view.scale = scale;
     view.x = mid(from.x, target.x);
     view.y = mid(from.y, target.y);
+    view.angle = mid(from.angle, target.angle!);
     render();
     if (t < 1) anim = requestAnimationFrame(step);
   };
@@ -214,12 +294,15 @@ export function fitContent() {
 }
 
 export const actualSize = () => {
-  const cx = rect.width / 2;
-  const cy = rect.height / 2;
+  // Keep the page point in the middle of the screen where it is, at 100% and the same angle.
+  const c = localToWorld(rect.width / 2, rect.height / 2);
+  const cos = Math.cos(view.angle);
+  const sin = Math.sin(view.angle);
   animateTo({
-    x: cx - ((cx - view.x) / view.scale) * 1,
-    y: cy - ((cy - view.y) / view.scale) * 1,
+    x: rect.width / 2 - (cos * c.x - sin * c.y),
+    y: rect.height / 2 - (sin * c.x + cos * c.y),
     scale: 1,
+    angle: view.angle,
   });
 };
 
@@ -239,12 +322,8 @@ canvas.parentElement!.append(lostBtn);
 /** Shows the button only when the page has content and none of it is on screen. */
 function updateLost() {
   const b = contentBox(page());
-  const off =
-    !!b &&
-    (b[2]! * view.scale + view.x < 0 ||
-      b[0]! * view.scale + view.x > rect.width ||
-      b[3]! * view.scale + view.y < 0 ||
-      b[1]! * view.scale + view.y > rect.height);
+  const s = b && screenBox(b[0]!, b[1]!, b[2]!, b[3]!);
+  const off = !!s && (s.x1 < 0 || s.x0 > rect.width || s.y1 < 0 || s.y0 > rect.height);
   lostBtn.hidden = !off;
 }
 
@@ -300,7 +379,7 @@ let chord: {
   max: number;
   origin: Map<number, { x: number; y: number }>;
   spoiled: boolean;
-  view: { x: number; y: number; scale: number };
+  view: { x: number; y: number; scale: number; angle: number };
 } | null = null;
 
 function chordDown(e: PointerEvent, palm: boolean) {
@@ -347,7 +426,21 @@ function gesture() {
   const cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
   const [a, b] = pts;
   const d = a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
-  return { cx, cy, d };
+  const angle = a && b ? Math.atan2(b.y - a.y, b.x - a.x) : 0;
+  return { cx, cy, d, angle, n: pts.length };
+}
+
+// Two-finger rotation starts only after a deliberate twist (Concepts does the same), so pinching
+// to zoom doesn't tilt the page; on release it snaps to upright or a quarter turn when close.
+const ROTATE_START = (10 * Math.PI) / 180;
+const SNAP = (6 * Math.PI) / 180;
+let twist = 0;
+let rotating = false;
+function snapRotation() {
+  const quarter = Math.PI / 2;
+  const target = Math.round(view.angle / quarter) * quarter;
+  if (Math.abs(view.angle - target) < SNAP)
+    rotateAt(rect.width / 2, rect.height / 2, target - view.angle);
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -395,13 +488,29 @@ canvas.addEventListener('pointermove', (e) => {
   const after = gesture();
   view.x += after.cx - before.cx;
   view.y += after.cy - before.cy;
-  if (before.d && after.d) zoomAt(after.cx, after.cy, after.d / before.d);
+  if (before.d && after.d && !state.viewLock.zoom) zoomAt(after.cx, after.cy, after.d / before.d);
+  if (before.n === 2 && after.n === 2 && !state.viewLock.rotate) {
+    const da = Math.atan2(
+      Math.sin(after.angle - before.angle),
+      Math.cos(after.angle - before.angle),
+    );
+    twist += da;
+    if (!rotating && Math.abs(twist) > ROTATE_START) {
+      rotating = true;
+      rotateAt(after.cx, after.cy, twist); // catch up with the twist so far
+    } else if (rotating) rotateAt(after.cx, after.cy, da);
+  }
   redraw();
 });
 
 const endPointer = (e: PointerEvent) => {
   if (e.pointerType === 'touch') chordUp(e, e.type === 'pointercancel');
   touches.delete(e.pointerId);
+  if (touches.size < 2) {
+    if (rotating) snapRotation();
+    rotating = false;
+    twist = 0;
+  }
   palms.delete(e.pointerId);
   if (e.pointerType === 'mouse') mousePan = null;
 };
@@ -427,7 +536,7 @@ canvas.addEventListener(
     const dy = wheelPx(e.deltaY, e.deltaMode);
     // Trackpad pinch arrives as Ctrl+wheel (Chrome, Edge, Firefox); Cmd+scroll zooms on macOS.
     if (e.ctrlKey || e.metaKey) {
-      if (safariPinch) return; // Safari already reported this pinch as a gesture
+      if (safariPinch || state.viewLock.zoom) return; // Safari already reported this pinch
       const factor = Math.min(2, Math.max(0.5, Math.exp(-dy * 0.01)));
       zoomAt(e.clientX - rect.left, e.clientY - rect.top, factor);
     } else {
@@ -451,7 +560,7 @@ addEventListener('gesturestart', (e) => {
 addEventListener('gesturechange', (e) => {
   e.preventDefault();
   const g = e as GestureLike;
-  if (!g.scale || !canvas.parentElement!.contains(e.target as Node)) return;
+  if (!g.scale || state.viewLock.zoom || !canvas.parentElement!.contains(e.target as Node)) return;
   zoomAt(g.clientX - rect.left, g.clientY - rect.top, g.scale / gestureScale);
   gestureScale = g.scale;
 });
@@ -466,6 +575,28 @@ zoomChip.addEventListener('click', () =>
     { label: 'Actual size (Ctrl+0)', icon: Scan, run: actualSize },
     { label: 'Zoom in (Ctrl+=)', icon: ZoomIn, run: () => zoomBy(1.25) },
     { label: 'Zoom out (Ctrl+-)', icon: ZoomOut, run: () => zoomBy(0.8) },
+    ...(view.angle
+      ? [{ label: 'Upright (reset rotation)', icon: RotateCcw, run: resetRotation }]
+      : []),
+    'sep',
+    {
+      label: state.viewLock.zoom ? 'Unlock zoom' : 'Lock zoom',
+      icon: state.viewLock.zoom ? LockOpen : Lock,
+      checked: state.viewLock.zoom,
+      run: () =>
+        update((s) => {
+          s.viewLock = { ...s.viewLock, zoom: !s.viewLock.zoom };
+        }),
+    },
+    {
+      label: state.viewLock.rotate ? 'Unlock rotation' : 'Lock rotation',
+      icon: state.viewLock.rotate ? LockOpen : Lock,
+      checked: state.viewLock.rotate,
+      run: () =>
+        update((s) => {
+          s.viewLock = { ...s.viewLock, rotate: !s.viewLock.rotate };
+        }),
+    },
   ]),
 );
 

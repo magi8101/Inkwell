@@ -189,8 +189,10 @@ function onBoxDown(e: PointerEvent, id: string, box: HTMLDivElement, resizing: b
   const start = { x: e.clientX, y: e.clientY };
   let moved = false;
   const move = (m: PointerEvent) => {
-    const dx = (m.clientX - start.x) / view.scale;
-    const dy = (m.clientY - start.y) / view.scale;
+    const w0 = toWorld(start.x, start.y);
+    const w1 = toWorld(m.clientX, m.clientY);
+    const dx = w1.x - w0.x;
+    const dy = w1.y - w0.y;
     if (!moved && Math.hypot(m.clientX - start.x, m.clientY - start.y) < TAP_SLOP) return;
     moved = true;
     if (resizing) box.style.width = `${Math.max(40, t.w + dx)}px`;
@@ -205,8 +207,10 @@ function onBoxDown(e: PointerEvent, id: string, box: HTMLDivElement, resizing: b
     box.removeEventListener('pointerup', up);
     box.removeEventListener('pointercancel', up);
     if (moved) {
-      const dx = (u.clientX - start.x) / view.scale;
-      const dy = (u.clientY - start.y) / view.scale;
+      const w0 = toWorld(start.x, start.y);
+      const w1 = toWorld(u.clientX, u.clientY);
+      const dx = w1.x - w0.x;
+      const dy = w1.y - w0.y;
       change(id, resizing ? { w: Math.max(40, t.w + dx) } : { x: t.x + dx, y: t.y + dy }, before);
       return;
     }

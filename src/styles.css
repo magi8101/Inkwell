@@ -990,6 +990,7 @@ body[data-tool="text"] .tbox {
 .sel-frame {
   position: absolute;
   z-index: 20;
+  transform-origin: 0 0;
   border: 1.5px dashed var(--accent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--accent) 5%, transparent);
@@ -1365,4 +1366,11 @@ button.twisty:hover {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+/* The page is turned: the zoom chip says so with an accent underline (angle in its tooltip). */
+.chip.turned {
+  box-shadow:
+    var(--shadow),
+    inset 0 -3px 0 var(--accent);
 }

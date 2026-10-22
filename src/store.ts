@@ -151,6 +151,8 @@ export interface State {
   /** The favourite pen being used; colour/width edits are saved back into it (like OneNote). */
   activeFavorite: number | null;
   snap: boolean;
+  /** Concepts-style locks: stop two fingers (and the wheel) from zooming / rotating the page. */
+  viewLock: { zoom: boolean; rotate: boolean };
   theme: 'system' | 'light' | 'dark';
   /** x < 0 means "centre it". */
   toolbar: { x: number; y: number; collapsed: boolean };
@@ -248,6 +250,7 @@ function defaults(): State {
     favorites: DEFAULT_FAVORITES.map((f) => ({ ...f })),
     activeFavorite: null,
     snap: true,
+    viewLock: { zoom: false, rotate: false },
     theme: 'system',
     toolbar: { x: -1, y: 16, collapsed: false },
     sidebarOpen: true,

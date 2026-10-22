@@ -384,6 +384,47 @@ async function suite() {
   await wait(400);
   fs = await folders();
   R.folderDeleteTakesSubfolders = fs.length === 1 && !fs.some((x) => x.id === top.id || x.id === sub.id);
+  // Canvas rotation (two-finger twist, like Concepts) and the rotation lock.
+  const chipText = () => document.querySelector('#zoom').title;
+  const twistBy = async (deg) => {
+    await wait(400); // past the pen grace period, so fingers aren't palms
+    const t = (type, id, x, y) =>
+      bg.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', isPrimary: id === 81, clientX: x, clientY: y, width: 20, height: 20, button: type === 'pointermove' ? -1 : 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true }));
+    t('pointerdown', 81, 600, 450);
+    t('pointerdown', 82, 800, 450);
+    for (let a = 2; a <= deg; a += 2) {
+      const r = (a * Math.PI) / 180;
+      t('pointermove', 82, 600 + 200 * Math.cos(r), 450 + 200 * Math.sin(r));
+    }
+    const r = (deg * Math.PI) / 180;
+    t('pointerup', 82, 600 + 200 * Math.cos(r), 450 + 200 * Math.sin(r));
+    t('pointerup', 81, 600, 450);
+    await wait(100);
+  };
+  await twistBy(40);
+  R.twoFingerRotate = /\b(3[6-9]|4[0-4])°/.test(chipText());
+  // A level pen line drawn on the turned page is stored turned back, in page coordinates.
+  btn('Pen').click();
+  await wait(400);
+  stroke(line(500, 300, 700, 300));
+  const pts = (await pg()).strokes.at(-1).points;
+  const slope = (Math.atan2(pts.at(-2) - pts[1], pts.at(-3) - pts[0]) * 180) / Math.PI;
+  R.inkOnRotatedPage = Math.abs(slope + 40) < 5;
+  btn('Undo').click();
+  document.querySelector('#zoom').click();
+  await wait(50);
+  [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Lock rotation')).click();
+  const chipBefore = chipText();
+  await twistBy(40);
+  R.rotationLock = chipText() === chipBefore;
+  document.querySelector('#zoom').click();
+  await wait(50);
+  [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Unlock rotation')).click();
+  document.querySelector('#zoom').click();
+  await wait(50);
+  [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Upright')).click();
+  await wait(50);
+  R.uprightResets = !chipText().includes('°');
   // Pen calibration: run every step with synthetic pen/touch input, apply, and share the report.
   btn('Pen feel and palm settings').click();
   await wait(100);

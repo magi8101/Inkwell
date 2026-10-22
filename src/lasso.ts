@@ -16,7 +16,7 @@ import {
 import { bbox, LINE_HEIGHT } from './stroke';
 import { renderTexts } from './text';
 import { colorName, shown } from './toolbar';
-import { isPalm, penSeen, redraw, tooBig, touchCount, toWorld, view } from './viewport';
+import { isPalm, penSeen, redraw, tooBig, toScreen, touchCount, toWorld, view } from './viewport';
 
 // Lasso (L): draw a loop around ink and text boxes to select them. Drag inside the frame to move,
 // the corner handle to resize, the round handle to rotate. Text boxes move and scale with the
@@ -187,10 +187,13 @@ function placeFrame() {
   }
   const b = worldBox(picked());
   const pad = 8;
-  frame.style.left = `${b.x * view.scale + view.x - pad}px`;
-  frame.style.top = `${b.y * view.scale + view.y - pad}px`;
+  // The frame sits on the page: at the box's top-left corner, turned with the view.
+  const corner = toScreen(b.x, b.y);
+  frame.style.left = `${corner.x}px`;
+  frame.style.top = `${corner.y}px`;
   frame.style.width = `${b.w * view.scale + pad * 2}px`;
   frame.style.height = `${b.h * view.scale + pad * 2}px`;
+  frame.style.transform = `rotate(${view.angle}rad) translate(${-pad}px, ${-pad}px)`;
   placeBar();
 }
 

@@ -13,7 +13,19 @@ import {
   update,
 } from './store';
 import { cut, hits, inkColor, outline, tipDiameter } from './stroke';
-import { isPalm, pageIsDark, penSeen, redraw, touchCount, toWorld, view } from './viewport';
+import {
+  isPalm,
+  localToWorld,
+  pageIsDark,
+  penSeen,
+  redraw,
+  screenBox,
+  toScreen,
+  touchCount,
+  toWorld,
+  view,
+  viewMatrix,
+} from './viewport';
 
 const MAX_HISTORY = 500;
 
@@ -227,7 +239,7 @@ function snapShape(a: Gesture) {
   if (!found) return;
   a.shape = found.strokes;
   clearLive();
-  ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
+  ctx.setTransform(...viewMatrix(dpr));
   ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
   ctx.fillStyle = inkColor(a.color, pageIsDark());
   for (const pts of a.shape) ctx.fill(outline(pts, { ...a, pressure: false }, true));
@@ -328,10 +340,7 @@ function drawTip(a: Gesture) {
   const n = a.points.length;
   const head = a.raw[a.raw.length - 1];
   if (a.mode !== 'ink' || a.shape || !n || !head) return;
-  const pts: Sample[] = [
-    { x: a.points[n - 3]! * view.scale + view.x, y: a.points[n - 2]! * view.scale + view.y, t: 0 },
-    head,
-  ];
+  const pts: Sample[] = [{ ...toScreen(a.points[n - 3]!, a.points[n - 2]!), t: 0 }, head];
   inkStats.predictor = 'off';
   if (state.tuning.prediction && !osTrailActive(a)) {
     // Prefer the browser's own prediction when it's newer than our newest sample.
@@ -471,11 +480,12 @@ function rememberInkBox(a: Gesture) {
   }
   if (x0 === Infinity) return;
   const pad = (a.width * view.scale) / 2 + 4;
+  const sb = screenBox(x0, y0, x1, y1);
   liveBox = {
-    x0: Math.floor((x0 * view.scale + view.x - pad) * dpr),
-    y0: Math.floor((y0 * view.scale + view.y - pad) * dpr),
-    x1: Math.ceil((x1 * view.scale + view.x + pad) * dpr),
-    y1: Math.ceil((y1 * view.scale + view.y + pad) * dpr),
+    x0: Math.floor((sb.x0 - pad) * dpr),
+    y0: Math.floor((sb.y0 - pad) * dpr),
+    x1: Math.ceil((sb.x1 + pad) * dpr),
+    y1: Math.ceil((sb.y1 + pad) * dpr),
   };
 }
 
@@ -503,8 +513,7 @@ function drawRulerLabel(a: Gesture) {
   const cm = Math.hypot(x1 - x0!, y1 - y0!) / PX_PER_CM;
   const deg = Math.round(((-Math.atan2(y1 - y0!, x1 - x0!) * 180) / Math.PI + 360) % 360);
   const text = `${cm.toFixed(1)} cm · ${deg}°`;
-  const sx = x1 * view.scale + view.x;
-  const sy = y1 * view.scale + view.y;
+  const { x: sx, y: sy } = toScreen(x1, y1);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.globalAlpha = 1;
   ctx.font = '600 12px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif';
@@ -523,7 +532,7 @@ function drawLive(a: Gesture, e: PointerEvent) {
   if (a.mode === 'ink') clearLiveArea();
   else clearLive(); // ruler label and eraser ring: rare, small layers, clear everything
   if (a.mode === 'line') {
-    ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
+    ctx.setTransform(...viewMatrix(dpr));
     ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
     ctx.fillStyle = inkColor(a.color, pageIsDark());
     ctx.fill(outline(a.points, { ...a, pressure: false }, true));
@@ -548,7 +557,7 @@ function drawLive(a: Gesture, e: PointerEvent) {
       }))
     : [];
   const color = inkColor(a.color, pageIsDark());
-  ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
+  ctx.setTransform(...viewMatrix(dpr));
   ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
   ctx.fillStyle = color;
   ctx.fill(outline(a.points, a, false));
@@ -614,11 +623,8 @@ function finish(keep: boolean) {
     // the stroke doesn't shrink back when the pen lifts.
     for (const r of a.raw) {
       if (r.seen) continue;
-      points.push(
-        round((r.x - view.x) / view.scale),
-        round((r.y - view.y) / view.scale),
-        round(r.p),
-      );
+      const w = localToWorld(r.x, r.y);
+      points.push(round(w.x), round(w.y), round(r.p));
     }
     commit(a.before, [...a.before, { id: uid(), tool, color, width, opacity, pressure, points }]);
   } else {

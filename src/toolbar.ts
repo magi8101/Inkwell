@@ -338,11 +338,15 @@ function sync() {
   redoBtn.disabled = !canRedo();
   const eraser = isEraser(state.tool);
   const st = state.styles[inkTool(state.tool)];
-  const size = eraser ? clamp(state.eraserWidth / 4, 6, 22) : clamp(st.width, 4, 22);
+  // A fixed-size chip, so the current colour is always visible (width is shown in the panel).
   swatchDot.style.cssText = eraser
-    ? `--c:transparent;--s:${size}px;--o:1`
-    : `--c:${shown(st.color)};--s:${size}px;--o:${Math.max(st.opacity, 0.35)}`;
+    ? '--c:transparent;--o:1'
+    : `--c:${shown(st.color)};--o:${Math.max(st.opacity, 0.45)}`;
   swatchDot.classList.toggle('eraser', eraser);
+  swatchDot.classList.toggle('highlighter', !eraser && inkTool(state.tool) === 'highlighter');
+  swatch.title = eraser
+    ? `Eraser size: ${state.eraserWidth}px`
+    : `Colour ${colorName(st.color)}, ${st.width}px — tap to change ([ and ] change size)`;
   renderFavorites();
   bar.hidden = state.toolbar.collapsed;
   fab.hidden = !state.toolbar.collapsed;

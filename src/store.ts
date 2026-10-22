@@ -111,6 +111,8 @@ export interface Tuning {
   tapGestures: boolean;
   /** Pen side button: tap opens the tool ring; hold + drag does this (or 'menu': ring on press). */
   sideButton: 'eraser' | 'pixelEraser' | 'menu';
+  /** The pen's back (eraser) end: removes whole strokes, or rubs out just what it touches. */
+  eraserEnd: 'eraser' | 'pixelEraser';
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -126,6 +128,7 @@ export const DEFAULT_TUNING: Tuning = {
   hoverPreview: true,
   tapGestures: true,
   sideButton: 'eraser',
+  eraserEnd: 'eraser',
 };
 
 export interface State {

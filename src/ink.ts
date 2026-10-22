@@ -235,8 +235,10 @@ function snapShape(a: Gesture) {
 let active: Gesture | null = null;
 
 function modeFor(e: PointerEvent): Mode | null {
-  // Flipping the Surface Pen to its eraser end always erases.
-  if (e.pointerType === 'pen' && (e.button === 5 || e.buttons & 32)) return 'erase';
+  // Flipping the pen to its eraser end always erases: whole strokes or pixels, as set.
+  if (e.pointerType === 'pen' && (e.button === 5 || e.buttons & 32)) {
+    return state.tuning.eraserEnd === 'pixelEraser' ? 'cut' : 'erase';
+  }
   // Side (barrel) button held while touching: erase as you drag; a tap opens the tool ring.
   if (e.pointerType === 'pen' && (e.button === 2 || e.buttons & 2)) {
     if (state.tuning.sideButton === 'menu') return null;

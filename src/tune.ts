@@ -155,38 +155,53 @@ function panel(): HTMLElement {
     toggle('hoverPreview', 'Show pen tip while hovering'),
     toggle('tapGestures', 'Two-finger tap undo, three-finger tap redo'),
   ];
-  const sideOptions = [
+  /** A labelled row of choices for one setting. */
+  const choice = <K extends 'sideButton' | 'eraserEnd'>(
+    key: K,
+    title: string,
+    options: readonly (readonly [Tuning[K], string])[],
+  ) => {
+    const btns = options.map(([v, label]) =>
+      h(
+        'button',
+        {
+          class: 'seg',
+          onclick: () =>
+            update((st) => {
+              st.tuning[key] = v;
+            }),
+        },
+        h('span', {}, label),
+      ),
+    );
+    return {
+      el: h(
+        'div',
+        { class: 'tune-side' },
+        h('div', { class: 'panel-sub' }, title),
+        h(
+          'div',
+          { class: 'segmented', style: `grid-template-columns:repeat(${options.length},1fr)` },
+          ...btns,
+        ),
+      ),
+      sync: () => {
+        for (const [i, b] of btns.entries()) {
+          b.setAttribute('aria-pressed', String(options[i]![0] === state.tuning[key]));
+        }
+      },
+    };
+  };
+  const side = choice('sideButton', 'Pen side button: tap for tool ring, hold and drag to…', [
     ['eraser', 'Erase'],
     ['pixelEraser', 'Pixel erase'],
     ['menu', 'Menu only'],
-  ] as const;
-  const sideBtns = sideOptions.map(([v, label]) =>
-    h(
-      'button',
-      {
-        class: 'seg',
-        onclick: () =>
-          update((st) => {
-            st.tuning.sideButton = v;
-          }),
-      },
-      h('span', {}, label),
-    ),
-  );
-  const side = {
-    el: h(
-      'div',
-      { class: 'tune-side' },
-      h('div', { class: 'panel-sub' }, 'Pen side button: tap for tool ring, hold and drag to…'),
-      h('div', { class: 'segmented three' }, ...sideBtns),
-    ),
-    sync: () => {
-      for (const [i, b] of sideBtns.entries()) {
-        b.setAttribute('aria-pressed', String(sideOptions[i]![0] === state.tuning.sideButton));
-      }
-    },
-  };
-  const all = [...rows, ...toggles, side];
+  ]);
+  const eraserEnd = choice('eraserEnd', 'Pen eraser end (back of the pen):', [
+    ['eraser', 'Erase strokes'],
+    ['pixelEraser', 'Pixel erase'],
+  ]);
+  const all = [...rows, ...toggles, side, eraserEnd];
   const refresh = () => {
     for (const r of all) r.sync();
   };
@@ -208,6 +223,7 @@ function panel(): HTMLElement {
     ...rows.map((r) => r.el),
     ...toggles.map((t) => t.el),
     side.el,
+    eraserEnd.el,
     readout,
     h(
       'button',

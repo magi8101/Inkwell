@@ -83,6 +83,25 @@ async function suite() {
   btn('Redo').click();
   R.redo = (await pg()).strokes.filter((s) => s.tool === 'pen' && s.pressure).length === 2;
   btn('Undo').click();
+  // The pen's eraser end follows its setting: pixel erase splits the line, stroke erase removes it.
+  const eraserEnd = async (label) => {
+    btn('Pen feel and palm settings').click();
+    await wait(50);
+    const group = [...document.querySelectorAll('.tune-side')].find((g) => g.textContent.includes('eraser end'));
+    [...group.querySelectorAll('button')].find((b) => b.textContent === label).click();
+    btn('Pen feel and palm settings').click();
+  };
+  btn('Pen').click();
+  const penLines = async () => (await pg()).strokes.filter((s) => s.tool === 'pen' && s.pressure).length;
+  await eraserEnd('Pixel erase');
+  stroke(line(550, 170, 550, 240), { button: 5, buttons: 32 });
+  R.eraserEndPixel = (await penLines()) === 2;
+  btn('Undo').click();
+  await eraserEnd('Erase strokes');
+  stroke(line(550, 170, 550, 240), { button: 5, buttons: 32 });
+  R.eraserEndStroke = (await penLines()) === 0;
+  btn('Undo').click();
+  R.eraserEndUndo = (await penLines()) === 1;
   btn('Text box').click();
   pid++;
   ev('pointerdown', 800, 450, { type: 'mouse' });

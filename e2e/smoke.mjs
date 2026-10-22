@@ -425,6 +425,24 @@ async function suite() {
   [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Upright')).click();
   await wait(50);
   R.uprightResets = !chipText().includes('°');
+  // Toolbar docking: drop the grip at the left edge → a vertical bar there; drag away → floating.
+  const tb = document.querySelector('#toolbar');
+  const grip = document.querySelector('.tb-grip');
+  const gripDrag = (toX, toY) => {
+    const g = grip.getBoundingClientRect();
+    const o = (t, x, y) => grip.dispatchEvent(new PointerEvent(t, { pointerId: 70, pointerType: 'mouse', clientX: x, clientY: y, button: t === 'pointermove' ? -1 : 0, buttons: t === 'pointerup' ? 0 : 1, bubbles: true }));
+    o('pointerdown', g.left + 5, g.top + 5);
+    o('pointermove', toX, toY);
+    o('pointerup', toX, toY);
+  };
+  const stageBox = document.querySelector('#stage').getBoundingClientRect();
+  gripDrag(stageBox.left + 10, stageBox.top + 300);
+  await wait(200);
+  const tr = tb.getBoundingClientRect();
+  R.toolbarDocksLeft = tb.classList.contains('vertical') && tr.height > tr.width && tr.left - stageBox.left < 20;
+  gripDrag(stageBox.left + 400, stageBox.top + 200);
+  await wait(200);
+  R.toolbarFloatsAgain = !tb.classList.contains('vertical');
   // Pen calibration: run every step with synthetic pen/touch input, apply, and share the report.
   btn('Pen feel and palm settings').click();
   await wait(100);

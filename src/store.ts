@@ -155,7 +155,8 @@ export interface State {
   viewLock: { zoom: boolean; rotate: boolean };
   theme: 'system' | 'light' | 'dark';
   /** x < 0 means "centre it". */
-  toolbar: { x: number; y: number; collapsed: boolean };
+  /** Floating at (x, y), or docked as a vertical bar on one side of the page. */
+  toolbar: { x: number; y: number; collapsed: boolean; dock?: 'left' | 'right' };
   sidebarOpen: boolean;
   query: string;
   tuning: Tuning;

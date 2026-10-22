@@ -1552,3 +1552,36 @@ button.twisty:hover {
     min-width: 40px;
   }
 }
+
+/* ---------- Toolbar docked at a side ---------- */
+
+#toolbar.vertical {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  max-height: calc(100% - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: pan-y;
+}
+
+#toolbar.vertical > * {
+  flex-shrink: 0;
+}
+
+#toolbar.vertical .tb-sep {
+  width: 24px;
+  height: 1px;
+  margin: 4px 0;
+}
+
+#toolbar.vertical .tb-favs {
+  flex-direction: column;
+}
+
+#toolbar.vertical .tb-grip {
+  width: 44px;
+  height: 24px;
+  rotate: 90deg;
+}

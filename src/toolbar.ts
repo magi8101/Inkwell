@@ -66,7 +66,11 @@ const sep = () => h('span', { class: 'tb-sep', 'aria-hidden': 'true' });
 
 const grip = h(
   'button',
-  { class: 'tb-grip', 'aria-label': 'Move toolbar', title: 'Drag to move' },
+  {
+    class: 'tb-grip',
+    'aria-label': 'Move toolbar',
+    title: 'Drag to move · drop at the left or right edge to dock it there',
+  },
   icon(GripVertical, 18),
 );
 const toolButtons = new Map<Tool, HTMLButtonElement>();
@@ -349,13 +353,30 @@ function renderFavorites() {
 const stage = bar.parentElement!;
 
 /** Positions are relative to the canvas area, which moves when the sidebar opens. */
-function place(x: number, y: number) {
+function place(x: number, y: number, dock = state.toolbar.dock) {
+  bar.classList.toggle('vertical', !!dock);
   const w = bar.offsetWidth;
   const ht = bar.offsetHeight;
+  if (dock) {
+    // Docked: against the side, centred top to bottom, clear of the corner buttons.
+    bar.style.left = `${dock === 'left' ? 8 : stage.clientWidth - w - 8}px`;
+    bar.style.top = `${clamp((stage.clientHeight - ht) / 2, 64, Math.max(64, stage.clientHeight - ht - 76))}px`;
+    return;
+  }
   const left = x < 0 ? (stage.clientWidth - w) / 2 : x;
   bar.style.left = `${clamp(left, 8, stage.clientWidth - w - 8)}px`;
   bar.style.top = `${clamp(y, 8, stage.clientHeight - ht - 8)}px`;
 }
+
+const DOCK_EDGE = 40; // dropping the grip this close to a side docks the toolbar there
+const dockAt = (clientX: number) => {
+  const r = stage.getBoundingClientRect();
+  return clientX - r.left < DOCK_EDGE
+    ? 'left'
+    : r.right - clientX < DOCK_EDGE
+      ? 'right'
+      : undefined;
+};
 
 grip.addEventListener('pointerdown', (e) => {
   e.preventDefault();
@@ -365,16 +386,27 @@ grip.addEventListener('pointerdown', (e) => {
   const dy = e.clientY - r.top;
   bar.classList.add('dragging');
   const origin = stage.getBoundingClientRect();
-  const move = (m: PointerEvent) =>
-    place(m.clientX - origin.left - dx, m.clientY - origin.top - dy);
+  let dock: 'left' | 'right' | undefined;
+  const move = (m: PointerEvent) => {
+    dock = dockAt(m.clientX);
+    // Previews the docked bar at the edge; otherwise follows the pointer, floating.
+    if (dock) place(0, 0, dock);
+    else {
+      bar.classList.remove('vertical');
+      place(m.clientX - origin.left - dx, m.clientY - origin.top - dy, undefined);
+    }
+  };
   const up = () => {
     grip.removeEventListener('pointermove', move);
     grip.removeEventListener('pointerup', up);
     grip.removeEventListener('pointercancel', up);
     bar.classList.remove('dragging');
     update((s) => {
-      s.toolbar.x = bar.offsetLeft;
-      s.toolbar.y = bar.offsetTop;
+      s.toolbar.dock = dock;
+      if (!dock) {
+        s.toolbar.x = bar.offsetLeft;
+        s.toolbar.y = bar.offsetTop;
+      }
     });
   };
   grip.addEventListener('pointermove', move);

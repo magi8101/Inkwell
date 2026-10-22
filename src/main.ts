@@ -223,3 +223,10 @@ onSaveError(() =>
     10000,
   ),
 );
+
+// Offline-first web build: cache the app after the first visit. Skipped in dev (stale modules)
+// and in the desktop app, whose files are already on disk.
+const secure = location.protocol === 'https:' || location.hostname === 'localhost';
+if (import.meta.env.PROD && secure && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}

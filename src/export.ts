@@ -20,6 +20,22 @@ const WHITE = '#ffffff';
 
 const measureCtx = document.createElement('canvas').getContext('2d')!;
 
+// pdf-lib is big, so it isn't in the startup bundle — but loading it only on Export broke export
+// offline. Warm it up once the app is idle: after that it's in memory (and the service worker's
+// cache), so Export works without internet.
+let pdfLib: Promise<typeof import('pdf-lib')> | null = null;
+const loadPdfLib = () => {
+  pdfLib ??= import('pdf-lib').catch((e) => {
+    pdfLib = null; // allow a retry once back online
+    throw e;
+  });
+  return pdfLib;
+};
+const idle = window.requestIdleCallback ?? ((fn: () => void) => setTimeout(fn, 2000));
+idle(() => {
+  loadPdfLib().catch(() => {});
+});
+
 /** World-space box around everything on the page; a default canvas if it's empty. */
 function contentBox(p: Page) {
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -81,7 +97,7 @@ async function exportPng(p: Page, paper: boolean) {
 // --- PDF: vector strokes via SVG paths, text with the standard PDF fonts ---
 
 async function exportPdf(pages: Page[], size: Size, paper: boolean, name: string) {
-  const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+  const { PDFDocument, StandardFonts, rgb } = await loadPdfLib();
   const doc = await PDFDocument.create();
   doc.setTitle(name);
   doc.setCreator('Inkwell');
@@ -347,7 +363,13 @@ function panel(): HTMLElement {
       toast('Exported — check your Downloads folder.', 3000);
     } catch (e) {
       console.error(e);
-      toast(`Export failed: ${e instanceof Error ? e.message : String(e)}`, 6000);
+      const msg = e instanceof Error ? e.message : String(e);
+      toast(
+        /fetch|import|network/i.test(msg)
+          ? 'PDF export needs a one-time download. Connect to the internet once, reopen Inkwell, then it works offline.'
+          : `Export failed: ${msg}`,
+        8000,
+      );
     } finally {
       go.disabled = false;
       go.textContent = 'Export';

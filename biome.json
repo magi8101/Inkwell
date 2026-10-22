@@ -10,7 +10,9 @@
       "index.html",
       "src-tauri/*.json",
       "src-tauri/capabilities/**",
-      "src-tauri/*.svg"
+      "src-tauri/*.svg",
+      "public/*.js",
+      "public/*.webmanifest"
     ]
   },
   "formatter": {

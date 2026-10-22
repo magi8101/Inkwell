@@ -1,4 +1,4 @@
-import { Copy, CopyPlus, RotateCw, Scissors, Trash2, X } from 'lucide';
+import { ClipboardPaste, Copy, CopyPlus, RotateCw, Scissors, Trash2, X } from 'lucide';
 import { capture, clamp, h, icon, toast } from './dom';
 import { commitSnapshot, type Snapshot, snapshot } from './ink';
 import { PALETTE, page, type Stroke, state, subscribe, type TextBox, uid, update } from './store';
@@ -167,6 +167,7 @@ function renderBar() {
     btn('Copy (Ctrl+C)', Copy, copy),
     btn('Cut (Ctrl+X)', Scissors, cut),
     btn('Duplicate (Ctrl+D)', CopyPlus, duplicate),
+    ...(clipboard ? [btn('Paste (Ctrl+V)', ClipboardPaste, paste)] : []),
     h(
       'div',
       { class: 'colors' },
@@ -186,10 +187,24 @@ function renderBar() {
   placeBar();
 }
 
+// Touch devices have no Ctrl+V, so a Paste button shows whenever something has been copied and
+// the lasso is active with nothing selected.
+const pasteChip = h(
+  'button',
+  { class: 'chip paste', hidden: true, title: 'Paste (Ctrl+V)', onclick: () => paste() },
+  icon(ClipboardPaste, 16),
+  h('span', {}, 'Paste'),
+);
+stage.append(pasteChip);
+function updatePasteChip() {
+  pasteChip.hidden = !clipboard || state.tool !== 'lasso' || hasSelection();
+}
+
 function select(strokes: Iterable<string>, texts: Iterable<string>) {
   selected = { strokes: new Set(strokes), texts: new Set(texts) };
   renderBar();
   placeFrame();
+  updatePasteChip();
 }
 const clear = () => select([], []);
 
@@ -199,7 +214,8 @@ function copy() {
   if (!hasSelection()) return;
   clipboard = { strokes: pickedStrokes(), texts: pickedTexts() };
   pasteCount = 0;
-  toast('Copied.', 1200);
+  toast('Copied — tap Paste to place it.', 1800);
+  updatePasteChip();
 }
 
 function remove() {
@@ -217,12 +233,12 @@ function cut() {
   remove();
 }
 
-function insert(items: { strokes: Stroke[]; texts: TextBox[] }, offset: number) {
+function insert(items: { strokes: Stroke[]; texts: TextBox[] }, dx: number, dy = dx) {
   const strokes = items.strokes.map((s) => {
-    const points = s.points.map((v, i) => (i % 3 === 2 ? v : v + offset));
+    const points = s.points.map((v, i) => (i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v));
     return { ...s, id: uid(), points };
   });
-  const texts = items.texts.map((t) => ({ ...t, id: uid(), x: t.x + offset, y: t.y + offset }));
+  const texts = items.texts.map((t) => ({ ...t, id: uid(), x: t.x + dx, y: t.y + dy }));
   const before = snapshot();
   commitSnapshot(before, {
     strokes: [...before.strokes, ...strokes],
@@ -239,10 +255,14 @@ function insert(items: { strokes: Stroke[]; texts: TextBox[] }, offset: number) 
   );
 }
 
+/** Pastes into the middle of what's on screen (the original may be off-screen or on another page). */
 function paste() {
   if (!clipboard) return;
-  pasteCount++;
-  insert(clipboard, PASTE_OFFSET * pasteCount);
+  const b = worldBox(clipboard.strokes, clipboard.texts);
+  const r = bg.getBoundingClientRect();
+  const c = toWorld(r.left + r.width / 2, r.top + r.height / 2);
+  const step = PASTE_OFFSET * pasteCount++; // repeated pastes fan out instead of stacking
+  insert(clipboard, c.x - (b.x + b.w / 2) + step, c.y - (b.y + b.h / 2) + step);
 }
 
 function duplicate() {
@@ -427,6 +447,7 @@ subscribe(() => {
   for (const id of selected.strokes) if (!ids.has(id)) selected.strokes.delete(id);
   for (const id of selected.texts) if (!tids.has(id)) selected.texts.delete(id);
   placeFrame();
+  updatePasteChip();
 });
 new MutationObserver(() => placeFrame()).observe(textLayer, {
   attributes: true,

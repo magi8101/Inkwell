@@ -98,27 +98,24 @@ const swatch = h(
   swatchDot,
 );
 const favs = h('div', { class: 'tb-favs', role: 'group', 'aria-label': 'Favourite pens' });
-const addFav = btn('Save current pen as favourite', StarPlus, () =>
+// Adds a new pen (a copy of the current one) and selects it, like OneNote's "Add pen": colour and
+// size changes then go into the new pen, never into the one it was copied from. Previously this
+// refused when the pen matched an existing favourite — which, since edits save into the selected
+// favourite, was always, so no new colour could ever be added.
+const addFav = btn('Add a new pen', StarPlus, () => {
+  if (state.favorites.length >= MAX_FAVORITES) {
+    toast(`Up to ${MAX_FAVORITES} pens — remove one from its colour panel first.`, 3500);
+    return;
+  }
   update((s) => {
     const tool = inkTool(s.tool);
-    const st = s.styles[tool];
-    const same = s.favorites.some(
-      (f) =>
-        f.tool === tool && f.color === st.color && f.width === st.width && f.opacity === st.opacity,
-    );
-    if (same) {
-      toast('That pen is already in your favourites.', 2500);
-      return;
-    }
-    if (s.favorites.length >= MAX_FAVORITES) {
-      toast(`Up to ${MAX_FAVORITES} favourites — right-click one to remove it first.`, 3500);
-      return;
-    }
-    s.favorites = [...s.favorites, { tool, ...st }];
+    s.favorites = [...s.favorites, { tool, ...s.styles[tool] }];
     s.activeFavorite = s.favorites.length - 1;
-    toast('Saved to favourites.', 1500);
-  }),
-);
+    if (isEraser(s.tool)) s.tool = tool;
+  });
+  toast('New pen added — pick its colour and size.', 2500);
+  togglePopover(swatch, stylePanel());
+});
 const hideBtn = btn(
   'Hide toolbar',
   EyeOff,
@@ -258,6 +255,7 @@ function stylePanel(): HTMLElement {
     h('div', { class: 'hex-row' }, picker, hex),
     h('label', { class: 'slider' }, h('span', {}, 'Width'), width, widthOut),
     h('label', { class: 'slider' }, h('span', {}, 'Opacity'), opacity, opacityOut),
+    removePenButton(),
   );
   // Keep the open panel in step with shortcuts and favourites.
   const unsub = subscribe(refresh);
@@ -269,6 +267,33 @@ function stylePanel(): HTMLElement {
   }).observe(document.body, { childList: true });
   refresh();
   return panel;
+}
+
+/** Touch devices have no right-click, so the selected pen can be removed from its panel. */
+function removePenButton(): HTMLElement | null {
+  const i = state.activeFavorite;
+  if (i === null) return null;
+  const label = h('span', {}, 'Remove this pen');
+  const b = h(
+    'button',
+    {
+      class: 'menu-item danger',
+      onclick: () => {
+        if (!b.dataset.armed) {
+          b.dataset.armed = '1';
+          label.textContent = 'Tap again to remove';
+          return;
+        }
+        update((s) => {
+          s.favorites.splice(i, 1);
+          s.activeFavorite = null;
+        });
+        b.remove();
+      },
+    },
+    label,
+  );
+  return b;
 }
 
 function renderFavorites() {

@@ -323,6 +323,21 @@ button:disabled {
   animation: pop-in 180ms var(--ease);
 }
 
+.chip.paste {
+  left: 50%;
+  right: auto;
+  bottom: 72px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  color: var(--accent-text);
+  font-weight: 600;
+  translate: -50% 0;
+}
+
 /* ---------- Popovers & menus ---------- */
 
 .popover {

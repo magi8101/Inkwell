@@ -111,6 +111,15 @@ async function suite() {
   F(nw, 'pointerup', h.left - 40, h.top - 40);
   R.lassoResizeCorner = pg().strokes[0].width > widthBefore;
   btn('Undo').click();
+  // Copy with the selection bar, deselect, then the on-screen Paste button (touch devices have no Ctrl+V).
+  document.querySelector('.selbar [aria-label^="Copy"]').click();
+  document.querySelector('.selbar [aria-label^="Deselect"]').click();
+  const nBeforePaste = pg().strokes.length;
+  const pasteChip = document.querySelector('.chip.paste');
+  R.pasteButtonShown = !!pasteChip && !pasteChip.hidden;
+  pasteChip?.click();
+  R.pasteButtonPastes = pg().strokes.length === nBeforePaste + 2;
+  btn('Undo').click();
   const n10 = pg().strokes.length;
   btn('Laser pointer').click();
   stroke(line(500, 600, 800, 650));
@@ -178,6 +187,20 @@ async function suite() {
   search.dispatchEvent(new Event('input'));
   await wait(1500);
   R.searchFindsText = document.querySelectorAll('.row.result').length === 1;
+  search.value = '';
+  search.dispatchEvent(new Event('input'));
+  // Add a pen, give it a new colour: the new pen changes, the default pen it was copied from doesn't.
+  const favs0 = JSON.parse(localStorage.getItem('inkwell:state')).favorites;
+  btn('Pen').click();
+  document.querySelector('.fav').click(); // default black pen
+  btn('Add a new pen').click();
+  await wait(100);
+  document.querySelector('.pal[data-color="#e5484d"]').click();
+  dispatchEvent(new Event('pagehide'));
+  const favs1 = JSON.parse(localStorage.getItem('inkwell:state')).favorites;
+  R.addPenAddsOne = favs1.length === favs0.length + 1;
+  R.newPenGetsColour = favs1.at(-1).color === '#e5484d';
+  R.defaultPenUnchanged = favs1[0].color === favs0[0].color;
   R.errors = errors;
   return R;
 }

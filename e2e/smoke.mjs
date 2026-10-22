@@ -424,6 +424,13 @@ for (const [name, engine, opts] of runs) {
     const nb = { id: 'n1', name: 'Old notebook', sections: [{ id: 's1', name: 'Old section', color: '#3e63dd', pages: [pg] }] };
     localStorage.setItem('inkwell:state', JSON.stringify({ notebooks: [nb], notebookId: 'n1', sectionId: 's1', pageId: 'p1' }));
   });
+  // The folder picker needs a person; hand the app the browser's sandbox folder instead.
+  if (engine === chromium) {
+    await page.context().addInitScript(() => {
+      window.showDirectoryPicker = async () =>
+        (await navigator.storage.getDirectory()).getDirectoryHandle('vault', { create: true });
+    });
+  }
   await page.goto(URL);
   await page.waitForSelector('#toolbar .tb-btn');
   const migration = await page.evaluate(async () => {
@@ -482,6 +489,75 @@ for (const [name, engine, opts] of runs) {
       return out;
     }),
   );
+  // Notebook in a folder on disk (Chromium only: other engines have no folder picker). The
+  // browser's private sandbox folder (OPFS) stands in for the folder the user would pick.
+  if (engine === chromium) {
+    const opfs = () =>
+      page.evaluate(async () => {
+        const out = {};
+        const walk = async (d, prefix) => {
+          for await (const [name, h] of d.entries()) {
+            if (h.kind === 'directory') await walk(h, `${prefix}${name}/`);
+            else out[prefix + name] = await (await h.getFile()).text();
+          }
+        };
+        await walk(await (await navigator.storage.getDirectory()).getDirectoryHandle('vault', { create: true }), '');
+        return out;
+      });
+    await page.evaluate(async () => {
+      await (await navigator.storage.getDirectory()).removeEntry('vault', { recursive: true }).catch(() => {});
+      document.querySelector('.nb-switch').click();
+      await new Promise((res) => setTimeout(res, 100));
+      [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Save this notebook to a folder')).click();
+    });
+    await page.waitForTimeout(1500);
+    let files = await opfs();
+    const pageFiles = Object.keys(files).filter((f) => f.endsWith('.inkwell'));
+    r.vaultWritesPages = pageFiles.length > 0 && pageFiles.every((f) => JSON.parse(files[f]).inkwell === 1);
+    r.vaultShowsFolder = await page.evaluate(() => !document.querySelector('.sb-vault').hidden && document.querySelector('.sb-vault').textContent.includes('vault'));
+    // Draw on the current page: its file updates by itself shortly after.
+    const current = await page.evaluate(() => {
+      const bg = document.querySelector('#bg');
+      const r = bg.getBoundingClientRect();
+      const ev = (type, x) =>
+        bg.dispatchEvent(new PointerEvent(type, { pointerId: 555, pointerType: 'pen', clientX: r.left + x, clientY: r.top + 300, pressure: 0.5, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true }));
+      document.querySelector('[aria-label="Pen"]').click();
+      ev('pointerdown', 200);
+      for (let x = 210; x < 400; x += 10) ev('pointermove', x);
+      ev('pointerup', 400);
+      return document.querySelector('.row.page[aria-current="true"]').dataset.id;
+    });
+    await page.waitForTimeout(3000);
+    files = await opfs();
+    const mine = Object.entries(files).find(([f, t]) => f.endsWith('.inkwell') && JSON.parse(t).id === current);
+    r.vaultSavesEdits = !!mine && JSON.parse(mine[1]).strokes.length > 0;
+    // A page added to the folder from outside (another device via OneDrive, say) appears on reload.
+    await page.evaluate(async () => {
+      const v = await (await navigator.storage.getDirectory()).getDirectoryHandle('vault');
+      const d = await v.getDirectoryHandle('External', { create: true });
+      const w = await (await d.getFileHandle('From outside.inkwell', { create: true })).createWritable();
+      await w.write(JSON.stringify({ inkwell: 1, id: 'ext1', title: 'x', strokes: [] }));
+      await w.close();
+    });
+    await page.reload();
+    await page.waitForSelector('#toolbar .tb-btn');
+    await page.waitForTimeout(2000);
+    r.vaultReadsOutsideChanges = await page.evaluate(() => {
+      const ext = [...document.querySelectorAll('.row.section')].find((x) => x.textContent.includes('External'));
+      if (!ext) return false;
+      ext.click();
+      return new Promise((res) =>
+        setTimeout(() => res([...document.querySelectorAll('.row.page')].some((x) => x.textContent.includes('From outside'))), 500),
+      );
+    });
+    await page.evaluate(async () => {
+      document.querySelector('.nb-switch').click();
+      await new Promise((res) => setTimeout(res, 100));
+      [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Stop saving')).click();
+    });
+    await page.waitForTimeout(500);
+    r.vaultStops = await page.evaluate(() => document.querySelector('.sb-vault').hidden);
+  }
   const errors = [...r.errors, ...consoleErrors];
   delete r.errors;
   const bad = Object.entries(r).filter(([k, v]) => v === false && k !== 'floodMsPerSample');

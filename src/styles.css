@@ -1316,3 +1316,26 @@ button.twisty:hover {
 .row.section.drop {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
+
+.sb-vault {
+  padding: 0 16px 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.sb-vault span,
+.sb-vault .reconnect {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sb-vault .reconnect {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--pressed);
+  color: var(--accent-text);
+  font-weight: 600;
+}

@@ -14,7 +14,7 @@
     "tauri": "tauri",
     "preview": "vite preview",
     "share": "lt --port 4173",
-    "check": "node src/stroke.check.ts && node src/shape.check.ts && node src/predict.check.ts && node src/calibration.check.ts",
+    "check": "node src/stroke.check.ts && node src/shape.check.ts && node src/predict.check.ts && node src/calibration.check.ts && node src/vault.check.ts",
     "deploy": "npm run web:build && wrangler deploy",
     "e2e": "node e2e/smoke.mjs",
     "build:onenote": "cargo build --manifest-path onenote/Cargo.toml --release --target wasm32-unknown-unknown && cp onenote/target/wasm32-unknown-unknown/release/onenote_import.wasm src/onenote-import.wasm"

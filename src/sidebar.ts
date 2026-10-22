@@ -7,8 +7,12 @@ import {
   Copy,
   Ellipsis,
   Folder,
+  FolderDown,
   FolderInput,
+  FolderOpen,
   FolderPlus,
+  FolderSync,
+  FolderX,
   PanelLeft,
   PanelLeftClose,
   Pencil,
@@ -38,6 +42,15 @@ import {
   whenIdle,
 } from './store';
 import { bbox } from './stroke';
+import {
+  forgetFolder,
+  onVaultChange,
+  openFolder,
+  reconnect,
+  saveToFolder,
+  vault,
+  vaultSupported,
+} from './vault';
 import { drawPage } from './viewport';
 
 const aside = document.querySelector<HTMLElement>('#sidebar')!;
@@ -76,8 +89,13 @@ export const search = h('input', {
 });
 const list = h('div', { class: 'sb-scroll' });
 
+// Which folder on disk the notebook is saved in (or a button to reconnect it after a restart).
+const vaultLine = h('div', { class: 'sb-vault' });
+onVaultChange(() => update(() => {}));
+
 aside.append(
   h('header', { class: 'sb-head' }, nbBtn, closeBtn),
+  vaultLine,
   h('label', { class: 'sb-search' }, icon(Search, 16), search),
   list,
 );
@@ -142,6 +160,45 @@ export function addPage() {
   });
 }
 
+function folderItems() {
+  if (!vaultSupported) return [];
+  const v = vault();
+  if (v?.notebookId === state.notebookId) {
+    return [
+      ...(v.connected
+        ? []
+        : [
+            {
+              label: `Reconnect folder “${v.name}”`,
+              icon: FolderSync,
+              run: () => void reconnect(),
+            },
+          ]),
+      { label: 'Stop saving to the folder', icon: FolderX, run: () => void forgetFolder() },
+    ];
+  }
+  return [
+    { label: 'Open a folder as a notebook…', icon: FolderOpen, run: () => void openFolder() },
+    { label: 'Save this notebook to a folder…', icon: FolderDown, run: () => void saveToFolder() },
+  ];
+}
+
+function renderVault() {
+  const v = vault();
+  vaultLine.hidden = !v || v.notebookId !== state.notebookId;
+  if (vaultLine.hidden || !v) return;
+  vaultLine.replaceChildren(
+    v.connected
+      ? h('span', { title: 'Changes save to this folder on disk' }, icon(Folder, 14), v.name)
+      : h(
+          'button',
+          { class: 'reconnect', onclick: () => void reconnect() },
+          icon(FolderSync, 14),
+          `Reconnect folder “${v.name}”`,
+        ),
+  );
+}
+
 function notebookMenu() {
   openMenu(nbBtn, [
     ...state.notebooks.map((n) => ({
@@ -164,6 +221,7 @@ function notebookMenu() {
           s.notebookId = n.id;
         }),
     },
+    ...folderItems(),
     {
       label: 'Rename notebook',
       icon: Pencil,
@@ -537,6 +595,7 @@ function render() {
   openBtn.hidden = state.sidebarOpen;
   if (!state.sidebarOpen) return;
   nbName.textContent = notebook().name;
+  renderVault();
   const q = state.query.trim();
   if (q) {
     list.replaceChildren(h('div', { class: 'sb-label' }, h('span', {}, 'Results')), ...results(q));

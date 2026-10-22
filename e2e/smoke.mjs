@@ -282,26 +282,34 @@ async function suite() {
     }
     calEv('pointerup', pts.at(-1), o);
   };
+  // Waits until the wizard shows step n (or the result), so slow browsers don't race it.
+  const step = async (n) => {
+    for (let i = 0; i < 100; i++) {
+      const t = document.querySelector('.cal-title')?.textContent ?? '';
+      if (n === 'done' ? !/^\d+\./.test(t) : t.startsWith(n)) return;
+      await wait(50);
+    }
+  };
   calEv('pointermove', at(0.5, 0.5), { buttons: 0 }); // 1. hover
-  await wait(900);
+  await step('2.');
   const stillPts = Array.from({ length: 220 }, (_, i) => at(0.5 + (i % 2) * 0.0005, 0.5)); // 2. hold still
   await calStroke(stillPts, {}, 10);
-  await wait(900);
+  await step('3.');
   const writing = Array.from({ length: 170 }, (_, i) => at(0.1 + i * 0.004, 0.6 + Math.sin(i / 3) * 0.05));
   await calStroke(writing, { p: 0.2 }); // 3. light
-  await wait(900);
+  await step('4.');
   await calStroke(writing, { p: 0.8 }); // 4. firm
-  await wait(900);
+  await step('5.');
   const ring = Array.from({ length: 320 }, (_, i) => at(0.5 + 0.3 * Math.cos(i / 20), 0.5 + 0.3 * Math.sin(i / 20)));
   await calStroke(ring, {}, 4); // 5. fast circles
-  await wait(900);
+  await step('6.');
   for (let i = 0; i < 10; i++) calEv('pointerdown', at(0.5, 0.5), { type: 'touch', id: 900 + i, size: 180 }); // 6. palm
-  await wait(900);
+  await step('7.');
   for (let i = 0; i < 3; i++) calEv('pointerdown', at(0.5, 0.5), { type: 'touch', id: 950 + i, size: 40 }); // 7. finger
-  await wait(900);
+  await step('8.');
   await calStroke([at(0.4, 0.4), at(0.41, 0.4)], { button: 2, buttons: 2 }); // 8. side button…
   await calStroke([at(0.4, 0.4), at(0.41, 0.4)], { button: 5, buttons: 32 }); // …and eraser end
-  await wait(900);
+  await step('done');
   R.calibrationFinishes = document.querySelector('.cal-title')?.textContent === 'Your pen is calibrated';
   let report = '';
   Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true });
@@ -384,6 +392,30 @@ for (const [name, engine, opts] of runs) {
   await page.reload();
   await page.waitForSelector('#toolbar .tb-btn');
   const r = { ...Object.fromEntries(Object.entries(migration).map(([k, v]) => [`migration_${k}`, v])), ...(await page.evaluate(suite)) };
+  // Dark page: the black pen draws white, and the hex box and picker say so too (not #1c1c1e).
+  await page.emulateMedia({ colorScheme: 'dark' });
+  Object.assign(
+    r,
+    await page.evaluate(async () => {
+      const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+      document.querySelector('[aria-label="Pen"]').click();
+      await wait(100);
+      document.querySelector('[aria-label^="Colour and size"]').click();
+      await wait(100);
+      document.querySelector('.pal[data-color="#1c1c1e"]').click();
+      await wait(50);
+      const hex = document.querySelector('.hex');
+      const picker = document.querySelector('.hex-row input[type="color"]');
+      const out = { darkHexShowsWhite: hex.value === '#f4f4f5' && picker.value === '#f4f4f5' };
+      hex.value = '#f4f4f5';
+      hex.dispatchEvent(new Event('input'));
+      await wait(50);
+      out.darkWhiteHexKeepsBlackPen =
+        document.querySelector('.pal[data-color="#1c1c1e"]').getAttribute('aria-pressed') === 'true';
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      return out;
+    }),
+  );
   const errors = [...r.errors, ...consoleErrors];
   delete r.errors;
   const bad = Object.entries(r).filter(([k, v]) => v === false && k !== 'floodMsPerSample');

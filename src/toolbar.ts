@@ -35,6 +35,8 @@ const MAX_FAVORITES = 10;
 
 /** Swatches show the colour the ink will actually be on this page (black turns white on dark pages). */
 export const shown = (c: string) => inkColor(c, pageIsDark());
+/** The reverse of `shown`: the white that black draws as on a dark page means black. */
+const stored = (c: string) => (c === shown(BLACK) ? BLACK : c);
 export const colorName = (c: string) =>
   c === BLACK ? 'Black (draws white on dark pages, black when printed)' : c;
 const HEX = /^#?([0-9a-f]{6})$/i;
@@ -217,9 +219,11 @@ function stylePanel(): HTMLElement {
       b.style.setProperty('--c', shown(c));
       b.setAttribute('aria-pressed', String(c === s.color));
     }
-    if (document.activeElement !== hex) hex.value = s.color;
+    // Hex and picker show the colour as drawn, like the swatches (black reads white on dark pages).
+    if (document.activeElement !== hex) hex.value = shown(s.color);
     hex.removeAttribute('aria-invalid');
-    picker.value = s.color;
+    hex.title = colorName(s.color);
+    picker.value = shown(s.color);
     width.value = String(s.width);
     opacity.value = String(Math.round(s.opacity * 100));
     widthOut.textContent = `${s.width}px`;
@@ -229,13 +233,13 @@ function stylePanel(): HTMLElement {
 
   hex.addEventListener('input', () => {
     const m = HEX.exec(hex.value.trim());
-    if (m) set({ color: `#${m[1]!.toLowerCase()}` });
+    if (m) set({ color: stored(`#${m[1]!.toLowerCase()}`) });
     else hex.setAttribute('aria-invalid', 'true');
   });
   hex.addEventListener('blur', refresh);
   // 'input' fires while dragging in the picker; some browsers' pickers only send 'change'.
-  picker.addEventListener('input', () => set({ color: picker.value }));
-  picker.addEventListener('change', () => set({ color: picker.value }));
+  picker.addEventListener('input', () => set({ color: stored(picker.value) }));
+  picker.addEventListener('change', () => set({ color: stored(picker.value) }));
   width.addEventListener('input', () => set({ width: Number(width.value) }));
   opacity.addEventListener('input', () => set({ opacity: Number(opacity.value) / 100 }));
 

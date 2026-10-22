@@ -37,7 +37,7 @@ function rdp(pts: P[], eps: number): P[] {
 }
 
 /** Points every STEP px along a polyline, as flat [x, y, pressure] with even pressure. */
-function densify(poly: P[]): number[] {
+export function densify(poly: P[]): number[] {
   const out: number[] = [];
   for (let i = 0; i < poly.length - 1; i++) {
     const a = poly[i]!;

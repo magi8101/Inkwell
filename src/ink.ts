@@ -1,5 +1,5 @@
 import { capture } from './dom';
-import { recognize } from './shape';
+import { densify, recognize } from './shape';
 import { inkTool, page, type Stroke, state, subscribe, uid, update } from './store';
 import { cut, hits, inkColor, outline } from './stroke';
 import { isPalm, pageIsDark, penSeen, redraw, touchCount, toWorld, view } from './viewport';
@@ -80,7 +80,7 @@ export function redo() {
 }
 
 // --- Drawing ---
-type Mode = 'ink' | 'erase' | 'cut';
+type Mode = 'ink' | 'erase' | 'cut' | 'line';
 interface Gesture {
   id: number;
   mode: Mode;
@@ -131,7 +131,8 @@ function modeFor(e: PointerEvent): Mode | null {
   if (state.tool === 'pen' || state.tool === 'highlighter') return 'ink';
   if (state.tool === 'eraser') return 'erase';
   if (state.tool === 'pixelEraser') return 'cut';
-  return null; // lasso, text and ruler come next
+  if (state.tool === 'ruler') return 'line';
+  return null;
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -175,6 +176,11 @@ function addPoints(a: Gesture, e: PointerEvent) {
       a.points.push(round(sx), round(sy), round(pr));
       continue;
     }
+    if (a.mode === 'line') {
+      const start = a.points.length ? { x: a.points[0]!, y: a.points[1]! } : w;
+      a.points = straightLine(start, w, e.shiftKey);
+      continue;
+    }
     // Sweep the eraser along its path so fast moves don't skip over ink.
     const dist = prev ? Math.hypot(w.x - prev.x, w.y - prev.y) : 0;
     const steps = Math.min(200, Math.ceil(dist / (r / 2)) || 1);
@@ -190,8 +196,54 @@ function addPoints(a: Gesture, e: PointerEvent) {
   drawLive(a, e);
 }
 
+// Ruler: lines snap to every 15° when within this many degrees (always with Shift).
+const ANGLE_SNAP_DEG = 4;
+// CSS reference pixels per centimetre at 100% zoom (96 px per inch).
+const PX_PER_CM = 96 / 2.54;
+
+function straightLine(a: { x: number; y: number }, b: { x: number; y: number }, force: boolean) {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  let angle = Math.atan2(b.y - a.y, b.x - a.x);
+  const step = Math.PI / 12;
+  const snapped = Math.round(angle / step) * step;
+  if (force || Math.abs(angle - snapped) < (ANGLE_SNAP_DEG * Math.PI) / 180) angle = snapped;
+  const end = { x: a.x + len * Math.cos(angle), y: a.y + len * Math.sin(angle) };
+  return densify([a, end]).map(round);
+}
+
+function drawRulerLabel(a: Gesture) {
+  const n = a.points.length;
+  if (n < 6) return;
+  const [x0, y0, ,] = a.points;
+  const x1 = a.points[n - 3]!;
+  const y1 = a.points[n - 2]!;
+  const cm = Math.hypot(x1 - x0!, y1 - y0!) / PX_PER_CM;
+  const deg = Math.round(((-Math.atan2(y1 - y0!, x1 - x0!) * 180) / Math.PI + 360) % 360);
+  const text = `${cm.toFixed(1)} cm · ${deg}°`;
+  const sx = x1 * view.scale + view.x;
+  const sy = y1 * view.scale + view.y;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.font = '600 12px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif';
+  const w = ctx.measureText(text).width + 16;
+  ctx.fillStyle = pageIsDark() ? 'rgba(244,244,245,0.92)' : 'rgba(24,24,27,0.88)';
+  ctx.beginPath();
+  ctx.roundRect(sx + 14, sy + 14, w, 24, 12);
+  ctx.fill();
+  ctx.fillStyle = pageIsDark() ? '#18181b' : '#fafafa';
+  ctx.fillText(text, sx + 22, sy + 30);
+}
+
 function drawLive(a: Gesture, e: PointerEvent) {
   clearLive();
+  if (a.mode === 'line') {
+    ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
+    ctx.globalAlpha = a.opacity;
+    ctx.fillStyle = inkColor(a.color, pageIsDark());
+    ctx.fill(outline(a.points, { ...a, pressure: false }, true));
+    drawRulerLabel(a);
+    return;
+  }
   if (a.mode !== 'ink') {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.beginPath();
@@ -236,6 +288,16 @@ function finish(keep: boolean) {
   if (!keep) {
     page().strokes = a.before;
     redraw();
+  } else if (a.mode === 'line') {
+    const { tool, color, width, opacity, points } = a;
+    const n = points.length;
+    const long = n >= 6 && Math.hypot(points[n - 3]! - points[0]!, points[n - 2]! - points[1]!) > 1;
+    if (long) {
+      commit(a.before, [
+        ...a.before,
+        { id: uid(), tool, color, width, opacity, pressure: false, points },
+      ]);
+    }
   } else if (a.mode === 'ink' && a.shape) {
     const { tool, color, width, opacity } = a;
     const shapes = a.shape.map((points) => ({
@@ -260,7 +322,9 @@ function finish(keep: boolean) {
     commit(a.before, page().strokes);
   }
   // Clear after the main canvas has painted the committed stroke, so it never blinks.
-  requestAnimationFrame(clearLive);
+  requestAnimationFrame(() => {
+    if (!active) clearLive(); // a new stroke may already have started this frame
+  });
 }
 
 bg.addEventListener('pointerdown', (e) => {

@@ -97,6 +97,9 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # Inkwell's one permanent signing key: every installer gets a .sig next to it.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.notes.outputs.release_id }}
           args: ${{ matrix.args }}
@@ -164,6 +167,24 @@ jobs:
     needs: [notes, build, android]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Checksums for every file, signed with Inkwell's key
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          mkdir files && cd files
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY"
+          rm -f SHA256SUMS.txt*
+          sha256sum -- * | grep -v '\.sig$' > ../SHA256SUMS.txt
+          cd ..
+          npx --yes @tauri-apps/cli@2 signer sign SHA256SUMS.txt
+          # Tauri writes the signature base64-wrapped; unwrapped it's a standard minisign file.
+          base64 -d SHA256SUMS.txt.sig > SHA256SUMS.txt.minisig
+          gh release upload "$TAG" SHA256SUMS.txt SHA256SUMS.txt.minisig --clobber --repo "$GITHUB_REPOSITORY"
       - env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

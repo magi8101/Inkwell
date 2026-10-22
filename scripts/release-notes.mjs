@@ -21,6 +21,8 @@ const NAMES = [
   'Pine Puffin', 'Quiet Quokka', 'Rustic Robin', 'Silver Seal', 'Thistle Tiger',
   'Upland Urial', 'Vivid Viper', 'Wild Walrus', 'Xeric Xenops', 'Yukon Yellowfin', 'Zinc Zebu',
 ];
+/** Inkwell's permanent signing key (public half), the same for every release. */
+const PUBKEY = 'RWQ9VllfUIRcViloBPWKvQG4YH8+aZh0EElUNXB5v3/S5AMQtb37td1U';
 const ROMAN = ['', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X'];
 
 export function releaseName(index) {
@@ -101,6 +103,13 @@ function main() {
     '- **macOS:** right-click the app → *Open* → *Open*. If it says the app is damaged, run `xattr -cr /Applications/Inkwell.app` in Terminal.',
     '- **Linux AppImage:** `chmod +x Inkwell_*.AppImage`, then run it.',
     '- **Android:** open the APK and allow installing from this source when asked. If an older Inkwell is installed and Android refuses, uninstall it first.',
+    '',
+    '### Check a download',
+    "Every file is listed in `SHA256SUMS.txt`, signed with Inkwell's permanent key (`SHA256SUMS.txt.minisig`). With [minisign](https://jedisct1.github.io/minisign/):",
+    '```',
+    `minisign -Vm SHA256SUMS.txt -P ${PUBKEY}`,
+    'sha256sum --ignore-missing -c SHA256SUMS.txt',
+    '```',
     '',
     'Prefer no install? The same app runs in the browser at https://inkwell.sharmamagi0.workers.dev.',
     '',

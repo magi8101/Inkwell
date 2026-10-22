@@ -140,6 +140,18 @@ button:disabled {
   transform: scale(0.94);
 }
 
+/* Hover preview of the pen tip; ring keeps it visible on any ink colour. */
+.hover-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(127, 127, 127, 0.55);
+  pointer-events: none;
+  will-change: transform;
+}
+
 /* ---------- Floating toolbar ---------- */
 
 #toolbar {
@@ -1011,6 +1023,20 @@ button.primary:disabled {
   width: 18px;
   height: 18px;
   accent-color: var(--accent);
+}
+
+.tune-side {
+  display: grid;
+  gap: 8px;
+}
+
+.segmented.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.tune-panel {
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
 }
 
 .tune-readout {

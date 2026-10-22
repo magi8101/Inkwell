@@ -1,4 +1,4 @@
-import { capture } from './dom';
+import { capture, h } from './dom';
 import { densify, recognize } from './shape';
 import { inkTool, page, type Stroke, state, subscribe, type TextBox, uid, update } from './store';
 import { cut, hits, inkColor, outline } from './stroke';
@@ -376,6 +376,28 @@ bg.addEventListener('panstart', () => {
 bg.addEventListener('palm', (e) => {
   if (active && active.id === (e as CustomEvent<number>).detail) finish(false);
 });
+
+// Hover preview: a dot under the hovering pen tip with the exact size and colour the ink will have
+// at this zoom (Apple's guidance: preview the mark, don't vary it with height). Pen only — a mouse
+// has its own cursor. It's a DOM element moved with a transform, so it never repaints the canvas.
+const hoverDot = h('div', { class: 'hover-dot', 'aria-hidden': 'true', hidden: true });
+bg.parentElement!.append(hoverDot);
+const hideHover = () => {
+  hoverDot.hidden = true;
+};
+bg.addEventListener('pointermove', (e) => {
+  const inks = state.tool === 'pen' || state.tool === 'highlighter' || state.tool === 'ruler';
+  if (active || e.pointerType !== 'pen' || e.buttons !== 0 || !inks || !state.tuning.hoverPreview) {
+    hideHover();
+    return;
+  }
+  const st = state.styles[inkTool(state.tool)];
+  const d = Math.max(3, st.width * view.scale);
+  hoverDot.hidden = false;
+  hoverDot.style.cssText = `width:${d}px;height:${d}px;background:${inkColor(st.color, pageIsDark())};opacity:${Math.max(st.opacity, 0.35)};transform:translate(${e.offsetX - d / 2}px, ${e.offsetY - d / 2}px)`;
+});
+bg.addEventListener('pointerdown', hideHover);
+bg.addEventListener('pointerleave', hideHover);
 
 // Eraser outline follows a hovering pen or mouse so you can see what will be erased.
 bg.addEventListener('pointermove', (e) => {

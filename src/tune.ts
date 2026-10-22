@@ -117,7 +117,8 @@ function panel(): HTMLElement {
       sync,
     };
   });
-  const toggle = (key: 'prediction' | 'inkTrail', label: string) => {
+  type BoolKey = 'prediction' | 'inkTrail' | 'hoverPreview' | 'tapGestures';
+  const toggle = (key: BoolKey, label: string) => {
     const box = h('input', {
       type: 'checkbox',
       onchange: () =>
@@ -135,8 +136,41 @@ function panel(): HTMLElement {
   const toggles = [
     toggle('prediction', 'Draw predicted points'),
     toggle('inkTrail', 'Windows Ink trail'),
+    toggle('hoverPreview', 'Show pen tip while hovering'),
+    toggle('tapGestures', 'Two-finger tap undo, three-finger tap redo'),
   ];
-  const all = [...rows, ...toggles];
+  const sideOptions = [
+    ['eraser', 'Erase'],
+    ['pixelEraser', 'Pixel erase'],
+    ['menu', 'Menu only'],
+  ] as const;
+  const sideBtns = sideOptions.map(([v, label]) =>
+    h(
+      'button',
+      {
+        class: 'seg',
+        onclick: () =>
+          update((st) => {
+            st.tuning.sideButton = v;
+          }),
+      },
+      h('span', {}, label),
+    ),
+  );
+  const side = {
+    el: h(
+      'div',
+      { class: 'tune-side' },
+      h('div', { class: 'panel-sub' }, 'Pen side button: tap for tool ring, hold and drag to…'),
+      h('div', { class: 'segmented three' }, ...sideBtns),
+    ),
+    sync: () => {
+      for (const [i, b] of sideBtns.entries()) {
+        b.setAttribute('aria-pressed', String(sideOptions[i]![0] === state.tuning.sideButton));
+      }
+    },
+  };
+  const all = [...rows, ...toggles, side];
   const refresh = () => {
     for (const r of all) r.sync();
   };
@@ -146,6 +180,7 @@ function panel(): HTMLElement {
     h('div', { class: 'panel-title' }, 'Pen feel'),
     ...rows.map((r) => r.el),
     ...toggles.map((t) => t.el),
+    side.el,
     readout,
     h(
       'button',

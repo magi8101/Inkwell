@@ -75,6 +75,12 @@ export interface Tuning {
   penGraceMs: number;
   prediction: boolean;
   inkTrail: boolean;
+  /** Show the pen's mark (size and colour) under a hovering pen tip. */
+  hoverPreview: boolean;
+  /** Two-finger tap undoes, three-finger tap redoes. */
+  tapGestures: boolean;
+  /** Pen side button: tap opens the tool ring; hold + drag does this (or 'menu': ring on press). */
+  sideButton: 'eraser' | 'pixelEraser' | 'menu';
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -85,6 +91,9 @@ export const DEFAULT_TUNING: Tuning = {
   penGraceMs: 300,
   prediction: true,
   inkTrail: true,
+  hoverPreview: true,
+  tapGestures: true,
+  sideButton: 'eraser',
 };
 
 export interface State {

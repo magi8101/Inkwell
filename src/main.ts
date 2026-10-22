@@ -1,6 +1,6 @@
 import './styles.css';
 import { FileText, Grid3x3, Grip, Moon, Rows3, Square, Sun, SunMoon } from 'lucide';
-import { h, icon, toast, togglePopover } from './dom';
+import { h, IS_MAC, icon, keys, toast, togglePopover } from './dom';
 import { exportButton, openExport } from './export';
 import { canRedo, canUndo, redo, undo } from './ink';
 import { openRadial } from './radial';
@@ -182,7 +182,8 @@ addEventListener('keydown', (e) => {
         search.focus();
       },
       n: addPage,
-      z: undo,
+      // Cmd+Shift+Z reports a lowercase 'z' on macOS, so check Shift rather than the letter case.
+      z: () => (e.shiftKey ? redo() : undo()),
       Z: redo,
       y: redo,
       D: openTuning,
@@ -249,3 +250,8 @@ const secure = location.protocol === 'https:' || location.hostname === 'localhos
 if (import.meta.env.PROD && secure && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
+
+// Static tooltips in index.html get the same ⌘ treatment as built elements.
+if (IS_MAC)
+  for (const el of document.querySelectorAll('[title]'))
+    el.setAttribute('title', keys(el.getAttribute('title')!));

@@ -1,5 +1,7 @@
 :root {
-  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font:
+    "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Cantarell,
+    "Noto Sans", sans-serif;
   --radius: 14px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --app-bg: #e9e9ec;
@@ -982,10 +984,37 @@ body[data-tool="text"] .tbox {
   touch-action: none;
 }
 
+.sel-handle::before {
+  content: "";
+  position: absolute;
+  inset: -9px; /* 46px touch target around a 28px handle */
+}
+
 .sel-handle.scale {
-  right: -14px;
-  bottom: -14px;
   border-radius: 8px;
+}
+
+.sel-handle.nw {
+  top: -14px;
+  left: -14px;
+  cursor: nwse-resize;
+}
+
+.sel-handle.ne {
+  top: -14px;
+  right: -14px;
+  cursor: nesw-resize;
+}
+
+.sel-handle.sw {
+  bottom: -14px;
+  left: -14px;
+  cursor: nesw-resize;
+}
+
+.sel-handle.se {
+  bottom: -14px;
+  right: -14px;
   cursor: nwse-resize;
 }
 

@@ -1,7 +1,7 @@
 // Run: node src/stroke.check.ts — fails loudly if eraser hit-testing or cutting breaks.
 import assert from 'node:assert/strict';
 import type { Stroke } from './store.ts';
-import { cut, hits } from './stroke.ts';
+import { cleanPoints, cut, hits } from './stroke.ts';
 
 const line: Stroke = {
   id: 'a',
@@ -40,4 +40,20 @@ assert.deepEqual(
   [],
   'dot under the eraser is removed',
 );
+// Dense, jittery Pencil-like input is thinned and smoothed; ends stay exact.
+let jit = 3;
+const wobble = () => {
+  jit = (jit * 16807) % 2147483647;
+  return (jit / 2147483647 - 0.5) * 0.7;
+};
+const dense: number[] = [];
+for (let i = 0; i <= 500; i++) dense.push(i * 0.6 + wobble(), 100 + wobble(), 0.5);
+const cleaned = cleanPoints(dense, 8);
+assert.ok(cleaned.length < 200, `dense samples are thinned (${cleaned.length})`);
+assert.deepEqual(cleaned[0], dense.slice(0, 3), 'first point unchanged');
+assert.deepEqual(cleaned.at(-1), dense.slice(-3), 'last point unchanged');
+let backwards = 0;
+for (let i = 2; i < cleaned.length; i++) if (cleaned[i]![0]! < cleaned[i - 1]![0]!) backwards++;
+assert.equal(backwards, 0, 'no backwards jitter steps left to read as corners');
+assert.equal(cleanPoints([0, 0, 0.5, 10, 0, 0.5], 4).length, 2, 'short strokes pass through');
 console.log('stroke checks passed');

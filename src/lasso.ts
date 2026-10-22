@@ -109,13 +109,18 @@ const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 svg.classList.add('lasso-path');
 const path = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
 svg.append(path);
-const scaleHandle = h('div', { class: 'sel-handle scale', title: 'Drag to resize' });
+// A resize handle on every corner (easy to reach with a finger or pencil wherever the selection
+// sits); each scales from the opposite corner.
+const CORNERS = ['nw', 'ne', 'sw', 'se'] as const;
+const scaleHandles = CORNERS.map((c) =>
+  h('div', { class: `sel-handle scale ${c}`, title: 'Drag to resize', 'data-corner': c }),
+);
 const rotateHandle = h(
   'div',
   { class: 'sel-handle rotate', title: 'Drag to rotate' },
   icon(RotateCw, 14),
 );
-const frame = h('div', { class: 'sel-frame', hidden: true }, scaleHandle, rotateHandle);
+const frame = h('div', { class: 'sel-frame', hidden: true }, ...scaleHandles, rotateHandle);
 stage.append(svg, frame);
 
 const bar = h('div', {
@@ -303,17 +308,22 @@ frame.addEventListener('pointerdown', (e) => {
   });
 });
 
-scaleHandle.addEventListener('pointerdown', (e) => {
-  if (!allowed(e)) return;
-  const b = worldBox(pickedStrokes(), pickedTexts());
-  const pivot = { x: b.x, y: b.y };
-  const startDist = Math.hypot(b.w, b.h) || 1;
-  drag(e, scaleHandle, (m, base) => {
-    const w = toWorld(m.clientX, m.clientY);
-    const s = clamp(Math.hypot(w.x - pivot.x, w.y - pivot.y) / startDist, 0.05, 20);
-    return transformed(base, transform(pivot, s, 0, 0, 0), s);
+for (const handle of scaleHandles) {
+  handle.addEventListener('pointerdown', (e) => {
+    if (!allowed(e)) return;
+    const b = worldBox(pickedStrokes(), pickedTexts());
+    const c = handle.dataset.corner!;
+    const pivot = { x: c.includes('w') ? b.x + b.w : b.x, y: c.includes('n') ? b.y + b.h : b.y };
+    // Ratio against where the drag started, so grabbing the handle never makes the selection jump.
+    const s0 = toWorld(e.clientX, e.clientY);
+    const startDist = Math.hypot(s0.x - pivot.x, s0.y - pivot.y) || 1;
+    drag(e, handle, (m, base) => {
+      const w = toWorld(m.clientX, m.clientY);
+      const s = clamp(Math.hypot(w.x - pivot.x, w.y - pivot.y) / startDist, 0.05, 20);
+      return transformed(base, transform(pivot, s, 0, 0, 0), s);
+    });
   });
-});
+}
 
 rotateHandle.addEventListener('pointerdown', (e) => {
   if (!allowed(e)) return;
@@ -337,12 +347,15 @@ bg.addEventListener('pointerdown', (e) => {
   capture(bg, e.pointerId);
   clear();
   const loop: Pt[] = [toWorld(e.clientX, e.clientY)];
-  const screen: string[] = [`${e.offsetX},${e.offsetY}`];
+  // clientX-based: Safari 18.2+ coalesced events have no target, so offsetX is unreliable.
+  const origin = bg.getBoundingClientRect();
+  const pt = (ev: PointerEvent) => `${ev.clientX - origin.left},${ev.clientY - origin.top}`;
+  const screen: string[] = [pt(e)];
   svg.style.display = 'block';
   const move = (m: PointerEvent) => {
     for (const ev of m.getCoalescedEvents?.().length ? m.getCoalescedEvents() : [m]) {
       loop.push(toWorld(ev.clientX, ev.clientY));
-      screen.push(`${ev.offsetX},${ev.offsetY}`);
+      screen.push(pt(ev));
     }
     path.setAttribute('points', screen.join(' '));
   };

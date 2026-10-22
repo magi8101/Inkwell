@@ -63,6 +63,13 @@ const kick = () => {
   if (!frame) frame = requestAnimationFrame(paint);
 };
 
+// Canvas-relative position from clientX/Y: coalesced events in Safari 18.2+ have no target, so
+// their offsetX/offsetY can't be trusted.
+const at = (e: PointerEvent) => {
+  const r = bg.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+};
+
 const allowed = (e: PointerEvent) =>
   e.pointerType !== 'touch' || (!penSeen && !isPalm(e) && touchCount() === 1);
 
@@ -70,8 +77,8 @@ bg.addEventListener('pointerdown', (e) => {
   if (state.tool !== 'laser' || e.button !== 0 || !allowed(e)) return;
   capture(bg, e.pointerId);
   drawingId = e.pointerId;
-  trail.push({ x: e.offsetX, y: e.offsetY, t: performance.now(), gap: true });
-  head = { x: e.offsetX, y: e.offsetY, t: performance.now() };
+  trail.push({ ...at(e), t: performance.now(), gap: true });
+  head = { ...at(e), t: performance.now() };
   kick();
 });
 
@@ -80,10 +87,9 @@ bg.addEventListener('pointermove', (e) => {
   const now = performance.now();
   if (drawingId === e.pointerId) {
     const evs = e.getCoalescedEvents?.();
-    for (const ev of evs?.length ? evs : [e])
-      trail.push({ x: ev.offsetX, y: ev.offsetY, t: now, gap: false });
+    for (const ev of evs?.length ? evs : [e]) trail.push({ ...at(ev), t: now, gap: false });
   }
-  head = { x: e.offsetX, y: e.offsetY, t: now };
+  head = { ...at(e), t: now };
   kick();
 });
 

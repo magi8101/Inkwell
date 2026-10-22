@@ -233,6 +233,7 @@ const round = (n: number) => Math.round(n * 100) / 100;
 function clearLive() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, live.width, live.height);
+  liveBox = null;
   tctx.setTransform(1, 0, 0, 1, 0, 0);
   tctx.clearRect(0, 0, tip.width, tip.height);
   tipBox = null;
@@ -388,7 +389,58 @@ function addPoints(a: Gesture, e: PointerEvent) {
   }
   if (changed) redraw();
   watchHold(a, e);
-  drawLive(a, e);
+  if (a.mode === 'ink') {
+    drawTip(a); // the newest samples show immediately
+    scheduleLive(a, e); // the full stroke at most once per frame
+  } else {
+    drawLive(a, e);
+  }
+}
+
+// Safari before iOS 18.2 fires every Apple Pencil sample (240 Hz) as its own pointermove; redrawing
+// the whole stroke on a full-resolution canvas for each one overloaded the iPad. The full stroke is
+// now drawn once per frame, while the tip still follows every sample.
+let liveQueued: Gesture | null = null;
+let liveEvent: PointerEvent | null = null;
+function scheduleLive(a: Gesture, e: PointerEvent) {
+  liveEvent = e;
+  if (liveQueued) return;
+  liveQueued = a;
+  requestAnimationFrame(() => {
+    const g = liveQueued;
+    liveQueued = null;
+    if (g && g === active && liveEvent) drawLive(g, liveEvent);
+  });
+}
+
+// Only the area the wet stroke covers is cleared each frame, not the whole retina-size canvas.
+let liveBox: { x0: number; y0: number; x1: number; y1: number } | null = null;
+function clearLiveArea() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (liveBox)
+    ctx.clearRect(liveBox.x0, liveBox.y0, liveBox.x1 - liveBox.x0, liveBox.y1 - liveBox.y0);
+  else ctx.clearRect(0, 0, live.width, live.height);
+  liveBox = null;
+}
+function rememberInkBox(a: Gesture) {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let i = 0; i < a.points.length; i += 3) {
+    x0 = Math.min(x0, a.points[i]!);
+    x1 = Math.max(x1, a.points[i]!);
+    y0 = Math.min(y0, a.points[i + 1]!);
+    y1 = Math.max(y1, a.points[i + 1]!);
+  }
+  if (x0 === Infinity) return;
+  const pad = (a.width * view.scale) / 2 + 4;
+  liveBox = {
+    x0: Math.floor((x0 * view.scale + view.x - pad) * dpr),
+    y0: Math.floor((y0 * view.scale + view.y - pad) * dpr),
+    x1: Math.ceil((x1 * view.scale + view.x + pad) * dpr),
+    y1: Math.ceil((y1 * view.scale + view.y + pad) * dpr),
+  };
 }
 
 // Ruler: lines snap to every 15° when within this many degrees (always with Shift).
@@ -423,14 +475,17 @@ function drawRulerLabel(a: Gesture) {
   const w = ctx.measureText(text).width + 16;
   ctx.fillStyle = pageIsDark() ? 'rgba(244,244,245,0.92)' : 'rgba(24,24,27,0.88)';
   ctx.beginPath();
-  ctx.roundRect(sx + 14, sy + 14, w, 24, 12);
+  if (ctx.roundRect) ctx.roundRect(sx + 14, sy + 14, w, 24, 12);
+  else ctx.rect(sx + 14, sy + 14, w, 24); // Safari < 16
   ctx.fill();
   ctx.fillStyle = pageIsDark() ? '#18181b' : '#fafafa';
   ctx.fillText(text, sx + 22, sy + 30);
 }
 
 function drawLive(a: Gesture, e: PointerEvent) {
-  clearLive();
+  if (a.shape) return; // a snapped shape owns the layer now
+  if (a.mode === 'ink') clearLiveArea();
+  else clearLive(); // ruler label and eraser ring: rare, small layers, clear everything
   if (a.mode === 'line') {
     ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
     ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
@@ -461,6 +516,7 @@ function drawLive(a: Gesture, e: PointerEvent) {
   ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
   ctx.fillStyle = color;
   ctx.fill(outline(a.points, a, false));
+  rememberInkBox(a);
   drawTip(a);
   if (presenter && osTrailActive(a)) {
     try {

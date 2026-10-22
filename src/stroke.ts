@@ -17,10 +17,45 @@ const options = (s: Shape, last: boolean): StrokeOptions => ({
   last,
 });
 
+// High-rate pens (Apple Pencil reports 240 Hz) give samples a fraction of a pixel apart with
+// sub-pixel jitter. perfect-freehand reads every tiny backwards step as a sharp corner and pinches
+// the outline, so dense input came out lumpy and notched. Before outlining: drop samples closer
+// than a fraction of the stroke width to the last kept one, then average out what jitter is left.
+// Done at render time, so strokes saved before the fix are cleaned too.
+const MIN_SPACING = 0.2; // × stroke width
+const MIN_SPACING_PX = 0.75;
+
+/** Thinned and lightly smoothed [x, y, pressure] points; first and last are kept exactly. */
+export function cleanPoints(points: number[], width: number): number[][] {
+  const n = points.length / 3;
+  const raw: number[][] = [];
+  for (let i = 0; i < points.length; i += 3) raw.push([points[i]!, points[i + 1]!, points[i + 2]!]);
+  if (n < 3) return raw;
+  const gap = Math.max(MIN_SPACING_PX, width * MIN_SPACING);
+  const kept: number[][] = [raw[0]!];
+  for (let i = 1; i < n - 1; i++) {
+    const a = kept[kept.length - 1]!;
+    const p = raw[i]!;
+    if (Math.hypot(p[0]! - a[0]!, p[1]! - a[1]!) >= gap) kept.push(p);
+  }
+  const lastRaw = raw[n - 1]!;
+  const prev = kept[kept.length - 1]!;
+  // The end point always stays; if it lands right next to the previous kept one, replace that.
+  if (kept.length > 1 && Math.hypot(lastRaw[0]! - prev[0]!, lastRaw[1]! - prev[1]!) < gap)
+    kept.pop();
+  kept.push(lastRaw);
+  if (kept.length < 4) return kept;
+  // One pass of a [1, 2, 1] average on the interior points removes leftover zig-zag.
+  return kept.map((p, i) => {
+    if (i === 0 || i === kept.length - 1) return p;
+    const a = kept[i - 1]!;
+    const b = kept[i + 1]!;
+    return [(a[0]! + 2 * p[0]! + b[0]!) / 4, (a[1]! + 2 * p[1]! + b[1]!) / 4, p[2]!];
+  });
+}
+
 function outlinePoints(points: number[], s: Shape, last: boolean) {
-  const pts: number[][] = [];
-  for (let i = 0; i < points.length; i += 3) pts.push([points[i]!, points[i + 1]!, points[i + 2]!]);
-  return getStroke(pts, options(s, last));
+  return getStroke(cleanPoints(points, s.width), options(s, last));
 }
 
 /** Pressure-shaped outline of a stroke as a closed path of quadratic curves. */
@@ -186,10 +221,23 @@ export function cut(s: Stroke, x: number, y: number, r: number, newId: () => str
 // --- Text boxes on canvas (thumbnails and exports; the live page uses editable DOM boxes). ---
 
 export const FONTS = {
-  sans: { label: 'Sans', css: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif' },
-  serif: { label: 'Serif', css: 'Cambria, Georgia, "Times New Roman", serif' },
-  mono: { label: 'Mono', css: '"Cascadia Mono", Consolas, ui-monospace, monospace' },
-  hand: { label: 'Hand', css: '"Ink Free", "Segoe Print", "Comic Sans MS", cursive' },
+  // Each stack lists the Windows, macOS and Linux font before the generic fallback.
+  sans: {
+    label: 'Sans',
+    css: '"Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Cantarell, "Noto Sans", sans-serif',
+  },
+  serif: {
+    label: 'Serif',
+    css: 'Cambria, Georgia, "Iowan Old Style", "Noto Serif", "DejaVu Serif", serif',
+  },
+  mono: {
+    label: 'Mono',
+    css: '"Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace',
+  },
+  hand: {
+    label: 'Hand',
+    css: '"Ink Free", "Segoe Print", Noteworthy, "Bradley Hand", "Comic Neue", "Comic Sans MS", cursive',
+  },
 } as const;
 export const LINE_HEIGHT = 1.3;
 

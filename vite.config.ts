@@ -18,5 +18,6 @@ export default defineConfig({
   server: { port: 1420, strictPort: true, watch: { ignored: ['**/src-tauri/**'] } },
   // Lets `npm run share` serve through the localtunnel hostname.
   preview: { port: 4173, strictPort: true, allowedHosts: ['.loca.lt'] },
-  build: { target: 'chrome120', sourcemap: false },
+  // Chromium (Windows desktop, Chrome/Edge/Brave), Safari/WebKit (macOS and Linux desktop apps) and Firefox.
+  build: { target: ['chrome110', 'edge110', 'safari15', 'firefox115'], sourcemap: false },
 });

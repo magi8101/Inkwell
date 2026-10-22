@@ -58,7 +58,12 @@ function startEditing(id: string, before = snapshot()) {
   editingId = id;
   selectedId = id;
   editBefore = before;
-  el.body.contentEditable = 'plaintext-only';
+  // 'plaintext-only' keeps pasted formatting out, but older Firefox throws on it.
+  try {
+    el.body.contentEditable = 'plaintext-only';
+  } catch {
+    el.body.contentEditable = 'true';
+  }
   el.body.focus();
   const range = document.createRange();
   range.selectNodeContents(el.body);

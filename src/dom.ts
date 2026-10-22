@@ -2,6 +2,11 @@ import { createElement, type IconNode } from 'lucide';
 
 type Child = Node | string | null | undefined | false;
 
+/** macOS users see ⌘ where the shortcut uses Cmd (Ctrl shortcuts accept either key). */
+export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+export const keys = (s: string) =>
+  IS_MAC ? s.replaceAll('Ctrl+', '⌘').replaceAll('Ctrl/Cmd', '⌘') : s;
+
 /** Tiny element builder: `on*` props become listeners, known props are set, the rest are attributes. */
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -15,13 +20,15 @@ export function h<K extends keyof HTMLElementTagNameMap>(
       el.addEventListener(k.slice(2), v as EventListener);
     } else if (k === 'class') {
       el.className = String(v);
+    } else if (k === 'title' || k === 'aria-label') {
+      el.setAttribute(k, keys(String(v)));
     } else if (k in el) {
       (el as unknown as Record<string, unknown>)[k] = v;
     } else {
       el.setAttribute(k, v === true ? '' : String(v));
     }
   }
-  for (const c of children) if (c) el.append(c);
+  for (const c of children) if (c) el.append(typeof c === 'string' ? keys(c) : c);
   return el;
 }
 

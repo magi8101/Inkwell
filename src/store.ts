@@ -146,7 +146,11 @@ export const PALETTE = [
 ];
 const SECTION_COLORS = ['#3e63dd', '#30a46c', '#f76b15', '#8e4ec6', '#d6409f', '#12a594'];
 
-export const uid = () => crypto.randomUUID();
+// randomUUID only exists in secure contexts (https/localhost); a LAN-IP visit would crash.
+export const uid = (): string =>
+  typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 
 export const newPage = (title = 'Untitled page'): Page => ({
   id: uid(),

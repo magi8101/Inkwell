@@ -1,7 +1,7 @@
 import { X } from 'lucide';
 import { clamp, h, icon } from './dom';
 import { inkTool, PALETTE, state, update } from './store';
-import { setTool, TOOLS } from './toolbar';
+import { colorName, setTool, shown, TOOLS } from './toolbar';
 
 const INNER = 72;
 const OUTER = 124;
@@ -48,9 +48,9 @@ export function openRadial(x: number, y: number) {
       h('button', {
         class: 'radial-color',
         role: 'menuitemradio',
-        style: `${at(OUTER, i, PALETTE.length)};--c:${c}`,
+        style: `${at(OUTER, i, PALETTE.length)};--c:${shown(c)}`,
         'aria-checked': String(state.styles[inkTool(state.tool)].color === c),
-        'aria-label': c,
+        'aria-label': colorName(c),
         onclick: pick(() =>
           update((s) => {
             if (s.tool !== 'highlighter') s.tool = 'pen';

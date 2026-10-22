@@ -1,7 +1,17 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "files": {
-    "includes": ["**", "!dist", "!src-tauri/target", "!src-tauri/gen"]
+    "includes": [
+      "src/**",
+      "*.ts",
+      "*.json",
+      "*.jsonc",
+      "*.md",
+      "index.html",
+      "src-tauri/*.json",
+      "src-tauri/capabilities/**",
+      "src-tauri/*.svg"
+    ]
   },
   "formatter": {
     "indentStyle": "space",

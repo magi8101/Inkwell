@@ -132,6 +132,23 @@ export const inkTool = (t: Tool): InkTool => (t === 'highlighter' ? 'highlighter
 
 const KEY = 'inkwell:state';
 
+const pen = (color: string): Favorite => ({ tool: 'pen', color, width: 3, opacity: 1 });
+const DEFAULT_FAVORITES: Favorite[] = [
+  pen('#1c1c1e'),
+  pen('#0090ff'),
+  pen('#e5484d'),
+  pen('#30a46c'),
+  pen('#8e4ec6'),
+  { tool: 'highlighter', color: '#ffc53d', width: 18, opacity: 0.4 },
+];
+// The first release shipped only three pens; upgrade anyone who never changed them.
+const OLD_DEFAULT_FAVORITES = JSON.stringify([
+  pen('#1c1c1e'),
+  pen('#0090ff'),
+  pen('#e5484d'),
+  { tool: 'highlighter', color: '#ffc53d', width: 18, opacity: 0.4 },
+]);
+
 function defaults(): State {
   const nb = newNotebook('My Notebook');
   return {
@@ -145,12 +162,7 @@ function defaults(): State {
       highlighter: { color: '#ffc53d', width: 18, opacity: 0.4 },
     },
     eraserWidth: 20,
-    favorites: [
-      { tool: 'pen', color: '#1c1c1e', width: 3, opacity: 1 },
-      { tool: 'pen', color: '#0090ff', width: 3, opacity: 1 },
-      { tool: 'pen', color: '#e5484d', width: 3, opacity: 1 },
-      { tool: 'highlighter', color: '#ffc53d', width: 18, opacity: 0.4 },
-    ],
+    favorites: DEFAULT_FAVORITES.map((f) => ({ ...f })),
     snap: true,
     theme: 'system',
     toolbar: { x: -1, y: 16, collapsed: false },
@@ -166,7 +178,17 @@ function load(): State {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<State> | null;
     if (saved?.notebooks?.length) {
-      return { ...base, ...saved, query: '', tuning: { ...DEFAULT_TUNING, ...saved.tuning } };
+      const favorites =
+        JSON.stringify(saved.favorites) === OLD_DEFAULT_FAVORITES
+          ? base.favorites
+          : saved.favorites;
+      return {
+        ...base,
+        ...saved,
+        favorites: favorites ?? base.favorites,
+        query: '',
+        tuning: { ...DEFAULT_TUNING, ...saved.tuning },
+      };
     }
   } catch {
     // Corrupt or blocked storage: start fresh rather than crash.

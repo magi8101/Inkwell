@@ -14,9 +14,11 @@ import {
   Type,
   Undo2,
 } from 'lucide';
-import { capture, clamp, h, icon, togglePopover } from './dom';
+import { capture, clamp, h, icon, toast, togglePopover } from './dom';
 import { canRedo, canUndo, redo, undo } from './ink';
 import { inkTool, PALETTE, state, subscribe, type Tool, update } from './store';
+import { BLACK, inkColor } from './stroke';
+import { pageIsDark } from './viewport';
 
 export const TOOLS: { id: Tool; label: string; key: string; icon: IconNode }[] = [
   { id: 'pen', label: 'Pen', key: 'P', icon: Pen },
@@ -27,7 +29,12 @@ export const TOOLS: { id: Tool; label: string; key: string; icon: IconNode }[] =
   { id: 'text', label: 'Text box', key: 'T', icon: Type },
   { id: 'ruler', label: 'Ruler and straight line', key: 'R', icon: Ruler },
 ];
-const MAX_FAVORITES = 8;
+const MAX_FAVORITES = 10;
+
+/** Swatches show the colour the ink will actually be on this page (black turns white on dark pages). */
+export const shown = (c: string) => inkColor(c, pageIsDark());
+export const colorName = (c: string) =>
+  c === BLACK ? 'Black (draws white on dark pages, black when printed)' : c;
 const HEX = /^#?([0-9a-f]{6})$/i;
 
 export const setTool = (t: Tool) =>
@@ -97,7 +104,16 @@ const addFav = btn('Save current pen as favourite', StarPlus, () =>
       (f) =>
         f.tool === tool && f.color === st.color && f.width === st.width && f.opacity === st.opacity,
     );
-    if (!same) s.favorites = [...s.favorites, { tool, ...st }].slice(-MAX_FAVORITES);
+    if (same) {
+      toast('That pen is already in your favourites.', 2500);
+      return;
+    }
+    if (s.favorites.length >= MAX_FAVORITES) {
+      toast(`Up to ${MAX_FAVORITES} favourites — right-click one to remove it first.`, 3500);
+      return;
+    }
+    s.favorites = [...s.favorites, { tool, ...st }];
+    toast('Saved to favourites.', 1500);
   }),
 );
 const hideBtn = btn(
@@ -187,16 +203,20 @@ function stylePanel(): HTMLElement {
   const swatches = PALETTE.map((c) =>
     h('button', {
       class: 'pal',
-      style: `--c:${c}`,
-      'aria-label': c,
-      title: c,
+      'data-color': c,
+      'aria-label': colorName(c),
+      title: colorName(c),
       onclick: () => set({ color: c }),
     }),
   );
 
   const refresh = () => {
     const s = st();
-    for (const b of swatches) b.setAttribute('aria-pressed', String(b.title === s.color));
+    for (const b of swatches) {
+      const c = b.dataset.color!;
+      b.style.setProperty('--c', shown(c));
+      b.setAttribute('aria-pressed', String(c === s.color));
+    }
     if (document.activeElement !== hex) hex.value = s.color;
     hex.removeAttribute('aria-invalid');
     picker.value = s.color;
@@ -204,7 +224,7 @@ function stylePanel(): HTMLElement {
     opacity.value = String(Math.round(s.opacity * 100));
     widthOut.textContent = `${s.width}px`;
     opacityOut.textContent = `${Math.round(s.opacity * 100)}%`;
-    preview.style.cssText = `--c:${s.color};--w:${Math.min(s.width, 32)}px;--o:${s.opacity}`;
+    preview.style.cssText = `--c:${shown(s.color)};--w:${Math.min(s.width, 32)}px;--o:${s.opacity}`;
   };
 
   hex.addEventListener('input', () => {
@@ -251,7 +271,7 @@ function renderFavorites() {
         'button',
         {
           class: `fav fav-${f.tool}`,
-          style: `--c:${f.color};--o:${f.opacity};--w:${clamp(f.width, 3, 14)}px`,
+          style: `--c:${shown(f.color)};--o:${f.opacity};--w:${clamp(f.width, 3, 14)}px`,
           'aria-pressed': String(active),
           'aria-label': `${f.tool} ${f.color} ${f.width}px`,
           title: `${f.tool === 'pen' ? 'Pen' : 'Highlighter'} · ${f.width}px — right-click to remove`,
@@ -319,7 +339,7 @@ function sync() {
   const size = eraser ? clamp(state.eraserWidth / 4, 6, 22) : clamp(st.width, 4, 22);
   swatchDot.style.cssText = eraser
     ? `--c:transparent;--s:${size}px;--o:1`
-    : `--c:${st.color};--s:${size}px;--o:${Math.max(st.opacity, 0.35)}`;
+    : `--c:${shown(st.color)};--s:${size}px;--o:${Math.max(st.opacity, 0.35)}`;
   swatchDot.classList.toggle('eraser', eraser);
   renderFavorites();
   bar.hidden = state.toolbar.collapsed;

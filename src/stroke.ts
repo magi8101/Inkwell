@@ -62,8 +62,9 @@ export function bbox(s: Stroke): [number, number, number, number] {
   return b;
 }
 
+export const BLACK = '#1c1c1e';
 /** Near-black ink flips to near-white on dark pages so it stays readable, like OneNote. */
-export const inkColor = (c: string, dark: boolean) => (dark && c === '#1c1c1e' ? '#f4f4f5' : c);
+export const inkColor = (c: string, dark: boolean) => (dark && c === BLACK ? '#f4f4f5' : c);
 
 export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, dark: boolean) {
   let p = paths.get(s);

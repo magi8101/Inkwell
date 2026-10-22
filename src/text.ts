@@ -1,4 +1,4 @@
-import { Bold, Italic, Minus, Plus, Trash2 } from 'lucide';
+import { Bold, Italic, Keyboard, Minus, Plus, Trash2 } from 'lucide';
 import { capture, clamp, h, icon } from './dom';
 import { commitSnapshot, type Snapshot, snapshot } from './ink';
 import { PALETTE, page, state, subscribe, type TextBox, type TextFont, uid, update } from './store';
@@ -52,6 +52,13 @@ const readText = (el: HTMLElement) =>
 
 // --- Editing ---
 
+// The on-screen keyboard doesn't pop up by itself: on a pen tablet it covers half the page every
+// time a box is tapped. A physical keyboard types as usual; the keyboard button in the text bar
+// brings up the on-screen one (and keeps doing so until it's turned off).
+const TOUCH_SCREEN = navigator.maxTouchPoints > 0;
+let showKeyboard = false;
+let refocusing = false;
+
 function startEditing(id: string, before = snapshot()) {
   const el = els.get(id);
   if (!el) return;
@@ -64,6 +71,7 @@ function startEditing(id: string, before = snapshot()) {
   } catch {
     el.body.contentEditable = 'true';
   }
+  el.body.inputMode = showKeyboard ? 'text' : 'none';
   el.body.focus();
   const range = document.createRange();
   range.selectNodeContents(el.body);
@@ -124,7 +132,7 @@ function makeBox(id: string) {
   const handle = h('div', { class: 'tbox-resize', 'aria-hidden': 'true' });
   const box = h('div', { class: 'tbox', 'data-id': id }, body, handle);
   body.addEventListener('blur', () => {
-    if (editingId === id) stopEditing();
+    if (editingId === id && !refocusing) stopEditing();
   });
   body.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') body.blur();
@@ -332,6 +340,33 @@ function renderBar() {
         icon(Plus, 16),
       ),
     ),
+    ...(TOUCH_SCREEN
+      ? [
+          h(
+            'button',
+            {
+              class: 'tb-btn',
+              'aria-pressed': String(showKeyboard),
+              'aria-label': 'On-screen keyboard',
+              title: 'On-screen keyboard',
+              onclick: () => {
+                showKeyboard = !showKeyboard;
+                const body = editingId ? els.get(editingId)?.body : undefined;
+                if (body) {
+                  // Browsers apply a new inputmode on the next focus.
+                  body.inputMode = showKeyboard ? 'text' : 'none';
+                  refocusing = true;
+                  body.blur();
+                  body.focus();
+                  refocusing = false;
+                } else if (showKeyboard && selectedId) startEditing(selectedId);
+                renderBar();
+              },
+            },
+            icon(Keyboard, 18),
+          ),
+        ]
+      : []),
     toggle(t.bold, 'Bold', Bold, { bold: !t.bold }),
     toggle(t.italic, 'Italic', Italic, { italic: !t.italic }),
     h(

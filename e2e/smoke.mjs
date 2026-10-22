@@ -106,6 +106,13 @@ async function suite() {
   pid++;
   ev('pointerdown', 800, 450, { type: 'mouse' });
   ev('pointerup', 800, 450, { type: 'mouse' });
+  // A new box doesn't summon the on-screen keyboard; on touch screens the bar's button does.
+  R.textNoAutoKeyboard = document.activeElement.inputMode === 'none';
+  if (navigator.maxTouchPoints > 0) {
+    btn('On-screen keyboard').click();
+    R.textKeyboardButton = document.activeElement.inputMode === 'text' && document.activeElement.classList.contains('tbox-body');
+    btn('On-screen keyboard').click();
+  }
   document.execCommand('insertText', false, 'regression note');
   document.activeElement.blur();
   R.textBox = (await pg()).texts.length === 1 && (await pg()).texts[0].text === 'regression note';

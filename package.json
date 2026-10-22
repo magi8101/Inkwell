@@ -29,6 +29,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
     "lucide": "^1.61.0",
+    "pdf-lib": "^1.17.1",
     "perfect-freehand": "^1.2.3"
   }
 }

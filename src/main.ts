@@ -1,6 +1,7 @@
 import './styles.css';
 import { FileText, Grid3x3, Grip, Moon, Rows3, Square, Sun, SunMoon } from 'lucide';
 import { h, icon, toast, togglePopover } from './dom';
+import { exportButton, openExport } from './export';
 import { redo, undo } from './ink';
 import { openRadial } from './radial';
 import { addPage, search } from './sidebar';
@@ -98,7 +99,7 @@ const themeBtn = h('button', {
       s.theme = NEXT_THEME[s.theme];
     }),
 });
-document.querySelector('#corner')!.append(tuneButton, pageBtn, themeBtn);
+document.querySelector('#corner')!.append(exportButton, tuneButton, pageBtn, themeBtn);
 const syncTheme = () => {
   themeBtn.replaceChildren(icon(THEMES[state.theme]));
   themeBtn.title = `Theme: ${state.theme}`;
@@ -152,6 +153,7 @@ addEventListener('keydown', (e) => {
       Z: redo,
       y: redo,
       D: openTuning,
+      e: openExport,
       '0': resetView,
       '=': () => zoomBy(1.25),
       '+': () => zoomBy(1.25),

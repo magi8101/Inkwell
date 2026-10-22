@@ -17,11 +17,15 @@ const options = (s: Shape, last: boolean): StrokeOptions => ({
   last,
 });
 
-/** Pressure-shaped outline of a stroke as a closed path of quadratic curves. */
-export function outline(points: number[], s: Shape, last: boolean): Path2D {
+function outlinePoints(points: number[], s: Shape, last: boolean) {
   const pts: number[][] = [];
   for (let i = 0; i < points.length; i += 3) pts.push([points[i]!, points[i + 1]!, points[i + 2]!]);
-  const o = getStroke(pts, options(s, last));
+  return getStroke(pts, options(s, last));
+}
+
+/** Pressure-shaped outline of a stroke as a closed path of quadratic curves. */
+export function outline(points: number[], s: Shape, last: boolean): Path2D {
+  const o = outlinePoints(points, s, last);
   const path = new Path2D();
   const first = o[0];
   if (!first) return path;
@@ -33,6 +37,21 @@ export function outline(points: number[], s: Shape, last: boolean): Path2D {
   }
   path.closePath();
   return path;
+}
+
+/** The same outline as SVG path data (M/Q/Z only), offset by (dx, dy), for vector export. */
+export function svgPath(st: Stroke, dx: number, dy: number): string {
+  const o = outlinePoints(st.points, st, true);
+  const f = (n: number) => n.toFixed(2);
+  const first = o[0];
+  if (!first) return '';
+  let d = `M${f(first[0] + dx)} ${f(first[1] + dy)}`;
+  for (let i = 0; i < o.length; i++) {
+    const a = o[i]!;
+    const b = o[(i + 1) % o.length]!;
+    d += ` Q${f(a[0] + dx)} ${f(a[1] + dy)} ${f((a[0] + b[0]) / 2 + dx)} ${f((a[1] + b[1]) / 2 + dy)}`;
+  }
+  return `${d} Z`;
 }
 
 let paths = new WeakMap<Stroke, Path2D>();

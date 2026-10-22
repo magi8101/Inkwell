@@ -22,7 +22,7 @@ export function pageColor(c: string): string {
     : c;
 }
 
-function isDark(hex: string): boolean {
+export function isDark(hex: string): boolean {
   const n = Number.parseInt(hex.slice(1, 7), 16);
   return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 128;
 }

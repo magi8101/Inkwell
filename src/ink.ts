@@ -1,4 +1,5 @@
 import { capture } from './dom';
+import { recognize } from './shape';
 import { inkTool, page, type Stroke, state, subscribe, uid, update } from './store';
 import { cut, hits, inkColor, outline } from './stroke';
 import { isPalm, pageIsDark, penSeen, redraw, touchCount, toWorld, view } from './viewport';
@@ -92,6 +93,33 @@ interface Gesture {
   before: Stroke[];
   /** Last raw pointer position in world space: the eraser sweeps from here. */
   last: { x: number; y: number; p: number } | null;
+  /** Where the pen started holding still (screen px) and the timer that snaps the shape. */
+  hold: { x: number; y: number; timer: number } | null;
+  /** Clean replacement strokes once the hand-drawn one was recognised as a shape. */
+  shape: number[][] | null;
+}
+
+// Hold the pen still this long at the end of a stroke to snap it into a clean shape.
+const HOLD_MS = 450;
+const HOLD_SLOP_PX = 4;
+
+function watchHold(a: Gesture, e: PointerEvent) {
+  if (!state.snap || a.mode !== 'ink' || a.shape) return;
+  if (a.hold && Math.hypot(e.clientX - a.hold.x, e.clientY - a.hold.y) < HOLD_SLOP_PX) return;
+  if (a.hold) clearTimeout(a.hold.timer);
+  a.hold = { x: e.clientX, y: e.clientY, timer: window.setTimeout(() => snapShape(a), HOLD_MS) };
+}
+
+function snapShape(a: Gesture) {
+  if (active !== a) return;
+  const found = recognize(a.points);
+  if (!found) return;
+  a.shape = found.strokes;
+  clearLive();
+  ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
+  ctx.globalAlpha = a.opacity;
+  ctx.fillStyle = inkColor(a.color, pageIsDark());
+  for (const pts of a.shape) ctx.fill(outline(pts, { ...a, pressure: false }, true));
 }
 let active: Gesture | null = null;
 
@@ -125,6 +153,7 @@ function eraseAt(a: Gesture, x: number, y: number, r: number): boolean {
 }
 
 function addPoints(a: Gesture, e: PointerEvent) {
+  if (a.shape) return; // snapped: the clean shape stays until the pen lifts
   const evs = e.getCoalescedEvents?.();
   const r = state.eraserWidth / 2 / view.scale;
   let changed = false;
@@ -157,6 +186,7 @@ function addPoints(a: Gesture, e: PointerEvent) {
     }
   }
   if (changed) redraw();
+  watchHold(a, e);
   drawLive(a, e);
 }
 
@@ -187,10 +217,14 @@ function drawLive(a: Gesture, e: PointerEvent) {
   ctx.fillStyle = color;
   ctx.fill(outline(pts, a, false));
   if (presenter && state.tuning.inkTrail && a.tool === 'pen' && a.opacity === 1) {
-    presenter.updateInkTrailStartPoint(e, {
-      color,
-      diameter: Math.max(1, a.width * view.scale * (e.pressure || 0.5)),
-    });
+    try {
+      presenter.updateInkTrailStartPoint(e, {
+        color,
+        diameter: Math.max(1, a.width * view.scale * (e.pressure || 0.5)),
+      });
+    } catch {
+      // The OS trail is a bonus; it must never break drawing (it rejects synthetic events, too).
+    }
   }
 }
 
@@ -198,9 +232,22 @@ function finish(keep: boolean) {
   const a = active;
   if (!a) return;
   active = null;
+  if (a.hold) clearTimeout(a.hold.timer);
   if (!keep) {
     page().strokes = a.before;
     redraw();
+  } else if (a.mode === 'ink' && a.shape) {
+    const { tool, color, width, opacity } = a;
+    const shapes = a.shape.map((points) => ({
+      id: uid(),
+      tool,
+      color,
+      width,
+      opacity,
+      pressure: false,
+      points,
+    }));
+    commit(a.before, [...a.before, ...shapes]);
   } else if (a.mode === 'ink') {
     const { tool, color, width, opacity, pressure, points } = a;
     // Smoothing lags behind the pen; end exactly where it lifted.
@@ -231,6 +278,8 @@ bg.addEventListener('pointerdown', (e) => {
     points: [],
     before: page().strokes,
     last: null,
+    hold: null,
+    shape: null,
   };
   addPoints(active, e);
 });

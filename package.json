@@ -14,7 +14,7 @@
     "tauri": "tauri",
     "preview": "vite preview",
     "share": "lt --port 4173",
-    "check": "node src/stroke.check.ts",
+    "check": "node src/stroke.check.ts && node src/shape.check.ts",
     "deploy": "npm run web:build && wrangler deploy"
   },
   "devDependencies": {

@@ -1,3 +1,5 @@
+import { kvGet, kvPut } from './db';
+
 export type Tool =
   | 'pen'
   | 'highlighter'
@@ -226,32 +228,51 @@ function defaults(): State {
   };
 }
 
-// ponytail: localStorage (~5 MB) keeps everything until file autosave lands; then notebooks move to disk.
-function load(): State {
-  const base = defaults();
+// Notes live in IndexedDB (see db.ts). Older versions used localStorage; that copy is read once,
+// moved across, and kept under a backup key after the move has committed. If IndexedDB is unavailable (some private
+// browsing modes) the app keeps working on localStorage.
+let useIdb = true;
+let migrated = false;
+
+async function readSaved(): Promise<Partial<State> | null> {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<State> | null;
-    if (saved?.notebooks?.length) {
-      const favorites =
-        JSON.stringify(saved.favorites) === OLD_DEFAULT_FAVORITES
-          ? base.favorites
-          : saved.favorites;
-      return {
-        ...base,
-        ...saved,
-        favorites: favorites ?? base.favorites,
-        query: '',
-        tuning: { ...DEFAULT_TUNING, ...saved.tuning },
-      };
-    }
+    const fromDb = await kvGet<Partial<State>>(KEY);
+    if (fromDb) return fromDb;
   } catch {
-    // Corrupt or blocked storage: start fresh rather than crash.
+    useIdb = false;
+  }
+  try {
+    const legacy = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<State> | null;
+    if (legacy && useIdb) migrated = true;
+    return legacy;
+  } catch {
+    return null; // corrupt or blocked storage: start fresh rather than crash
+  }
+}
+
+function load(saved: Partial<State> | null): State {
+  const base = defaults();
+  if (saved?.notebooks?.length) {
+    const favorites =
+      JSON.stringify(saved.favorites) === OLD_DEFAULT_FAVORITES ? base.favorites : saved.favorites;
+    return {
+      ...base,
+      ...saved,
+      favorites: favorites ?? base.favorites,
+      query: '',
+      tuning: { ...DEFAULT_TUNING, ...saved.tuning },
+    };
   }
   return base;
 }
 
-export const state: State = load();
+// Top-level await: every module that reads the state waits for storage, so nothing renders with
+// the wrong notes. Reading IndexedDB takes a few milliseconds.
+export const state: State = load(await readSaved());
 fixSelection(state);
+// Ask the browser not to evict our data under storage pressure (Safari otherwise may for sites
+// that aren't installed to the home screen).
+navigator.storage?.persist?.().catch(() => {});
 
 // Applied here, before any module renders, so theme-dependent colours resolve correctly.
 const systemDark = matchMedia('(prefers-color-scheme: dark)');
@@ -280,17 +301,46 @@ export const whenIdle: (fn: () => void) => void =
     : (fn) => setTimeout(fn, 300);
 let savePending = false;
 
-export function saveNow() {
+function reportSaveFailure() {
+  // Say so once, loudly: silently dropping notes is the worst outcome.
+  if (!saveFailed) {
+    saveFailed = true;
+    for (const l of saveErrorListeners) l();
+  }
+}
+
+/** Writes the notes now. The returned promise settles when the write is durable. */
+export async function saveNow(): Promise<void> {
   savePending = false;
+  const snapshot = { ...state, query: undefined };
+  if (useIdb) {
+    try {
+      await kvPut(KEY, snapshot);
+      saveFailed = false;
+      if (migrated) {
+        // The IndexedDB copy is committed. Keep the old copy as a backup rather than deleting it,
+        // so even a migration that raced a just-written save can never lose notes.
+        migrated = false;
+        const old = localStorage.getItem(KEY);
+        if (old !== null) {
+          localStorage.removeItem(KEY);
+          try {
+            localStorage.setItem(`${KEY}:backup-before-indexeddb`, old);
+          } catch {
+            // No room for the backup; the notes themselves are safe in IndexedDB.
+          }
+        }
+      }
+      return;
+    } catch {
+      useIdb = false; // fall through to localStorage
+    }
+  }
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...state, query: undefined }));
+    localStorage.setItem(KEY, JSON.stringify(snapshot));
     saveFailed = false;
   } catch {
-    // Storage full or blocked. Say so once, loudly: silently dropping notes is the worst outcome.
-    if (!saveFailed) {
-      saveFailed = true;
-      for (const l of saveErrorListeners) l();
-    }
+    reportSaveFailure();
   }
 }
 
@@ -298,13 +348,15 @@ function scheduleSave() {
   if (savePending) return;
   savePending = true;
   whenIdle(() => {
-    if (savePending) saveNow();
+    if (savePending) void saveNow();
   });
 }
 const flush = () => {
-  if (savePending) saveNow();
+  if (savePending) void saveNow();
 };
 addEventListener('pagehide', flush);
+// Notes just read from the old localStorage copy are written to IndexedDB straight away.
+if (migrated) scheduleSave();
 addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') flush();
 });

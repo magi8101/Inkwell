@@ -12,10 +12,19 @@ async function suite() {
   addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
   const bg = document.querySelector('#bg');
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const pg = () => {
-    dispatchEvent(new Event('pagehide')); // flush the idle autosave
-    return JSON.parse(localStorage.getItem('inkwell:state')).notebooks[0].sections[0].pages[0];
+  // Notes live in IndexedDB; flush the idle autosave, then read what was stored.
+  const stored = async () => {
+    dispatchEvent(new Event('pagehide'));
+    await wait(80);
+    return new Promise((resolve) => {
+      const req = indexedDB.open('inkwell');
+      req.onsuccess = () => {
+        const get = req.result.transaction('kv').objectStore('kv').get('inkwell:state');
+        get.onsuccess = () => resolve(get.result);
+      };
+    });
   };
+  const pg = async () => (await stored()).notebooks[0].sections[0].pages[0];
   const btn = (l) => document.querySelector(`[aria-label="${l}"]`);
   let pid = 100;
   const ev = (type, x, y, o = {}) =>
@@ -48,7 +57,7 @@ async function suite() {
   stroke(line(400, 200, 700, 220));
   btn('Highlighter').click();
   stroke(line(400, 260, 700, 260));
-  R.penAndHighlighter = pg().strokes.map((s) => s.tool).join(',') === 'pen,highlighter';
+  R.penAndHighlighter = (await pg()).strokes.map((s) => s.tool).join(',') === 'pen,highlighter';
   // A frame later the wet layers must be clear again (strokes moved to the page).
   await wait(400);
   btn('Pen').click();
@@ -58,21 +67,21 @@ async function suite() {
   for (let i = 0; i < 3; i++) for (const p of line(...tri[i], ...tri[i + 1], 20).slice(1)) ev('pointermove', ...p);
   await wait(650);
   ev('pointerup', ...tri[3]);
-  R.shapeSnapped = pg().strokes.at(-1).pressure === false && pg().strokes.length === 3;
+  R.shapeSnapped = (await pg()).strokes.at(-1).pressure === false && (await pg()).strokes.length === 3;
   btn('Ruler and straight line').click();
   stroke(line(800, 300, 1000, 303));
-  const rl = pg().strokes.at(-1).points;
+  const rl = (await pg()).strokes.at(-1).points;
   R.rulerLevel = Math.abs(rl[1] - rl.at(-2)) < 0.01;
   btn('Stroke eraser').click();
   stroke(line(900, 260, 900, 340));
-  R.strokeEraser = pg().strokes.length === 3;
+  R.strokeEraser = (await pg()).strokes.length === 3;
   btn('Pixel eraser').click();
   stroke(line(550, 170, 550, 240));
-  R.pixelEraserSplit = pg().strokes.filter((s) => s.tool === 'pen' && s.pressure).length === 2;
+  R.pixelEraserSplit = (await pg()).strokes.filter((s) => s.tool === 'pen' && s.pressure).length === 2;
   btn('Undo').click();
-  R.undo = pg().strokes.filter((s) => s.tool === 'pen' && s.pressure).length === 1;
+  R.undo = (await pg()).strokes.filter((s) => s.tool === 'pen' && s.pressure).length === 1;
   btn('Redo').click();
-  R.redo = pg().strokes.filter((s) => s.tool === 'pen' && s.pressure).length === 2;
+  R.redo = (await pg()).strokes.filter((s) => s.tool === 'pen' && s.pressure).length === 2;
   btn('Undo').click();
   btn('Text box').click();
   pid++;
@@ -80,12 +89,12 @@ async function suite() {
   ev('pointerup', 800, 450, { type: 'mouse' });
   document.execCommand('insertText', false, 'regression note');
   document.activeElement.blur();
-  R.textBox = pg().texts.length === 1 && pg().texts[0].text === 'regression note';
+  R.textBox = (await pg()).texts.length === 1 && (await pg()).texts[0].text === 'regression note';
   btn('Lasso select').click();
   stroke([[380, 180], [720, 180], [720, 290], [380, 290], [382, 182]], { type: 'mouse', id: 1 });
   const frame = document.querySelector('.sel-frame');
   const fr = frame.getBoundingClientRect();
-  const before = pg().strokes[0].points[0];
+  const before = (await pg()).strokes[0].points[0];
   const F = (el, t, x, y) =>
     el.dispatchEvent(
       new PointerEvent(t, {
@@ -101,32 +110,32 @@ async function suite() {
   F(frame, 'pointerdown', fr.left + 20, fr.top + 20);
   F(frame, 'pointermove', fr.left + 70, fr.top + 20);
   F(frame, 'pointerup', fr.left + 70, fr.top + 20);
-  R.lassoMoved = Math.round(pg().strokes[0].points[0] - before) === 50;
+  R.lassoMoved = Math.round((await pg()).strokes[0].points[0] - before) === 50;
   // Resize from the top-left handle: the bottom-right corner must stay put.
   const nw = document.querySelector('.sel-handle.nw');
   const h = nw.getBoundingClientRect();
-  const widthBefore = pg().strokes[0].width;
+  const widthBefore = (await pg()).strokes[0].width;
   F(nw, 'pointerdown', h.left + 14, h.top + 14);
   F(nw, 'pointermove', h.left - 40, h.top - 40);
   F(nw, 'pointerup', h.left - 40, h.top - 40);
-  R.lassoResizeCorner = pg().strokes[0].width > widthBefore;
+  R.lassoResizeCorner = (await pg()).strokes[0].width > widthBefore;
   btn('Undo').click();
   // Copy with the selection bar, deselect, then the on-screen Paste button (touch devices have no Ctrl+V).
   document.querySelector('.selbar [aria-label^="Copy"]').click();
   document.querySelector('.selbar [aria-label^="Deselect"]').click();
-  const nBeforePaste = pg().strokes.length;
+  const nBeforePaste = (await pg()).strokes.length;
   const pasteChip = document.querySelector('.chip.paste');
   R.pasteButtonShown = !!pasteChip && !pasteChip.hidden;
   pasteChip?.click();
-  R.pasteButtonPastes = pg().strokes.length === nBeforePaste + 2;
+  R.pasteButtonPastes = (await pg()).strokes.length === nBeforePaste + 2;
   btn('Undo').click();
-  const n10 = pg().strokes.length;
+  const n10 = (await pg()).strokes.length;
   btn('Laser pointer').click();
   stroke(line(500, 600, 800, 650));
-  R.laserNotSaved = pg().strokes.length === n10;
+  R.laserNotSaved = (await pg()).strokes.length === n10;
   btn('Pen').click();
   await wait(400);
-  const x11 = pg().strokes[0].points[0];
+  const x11 = (await pg()).strokes[0].points[0];
   const T = (t, id, x) =>
     bg.dispatchEvent(
       new PointerEvent(t, {
@@ -146,7 +155,7 @@ async function suite() {
   await wait(60);
   T('pointerup', 301, 600);
   T('pointerup', 302, 660);
-  R.twoFingerTapUndo = Math.round(x11 - pg().strokes[0].points[0]) === 50;
+  R.twoFingerTapUndo = Math.round(x11 - (await pg()).strokes[0].points[0]) === 50;
   await wait(50);
   pid++;
   ev('pointerdown', 900, 650, { button: 2, buttons: 2 });
@@ -190,14 +199,13 @@ async function suite() {
   search.value = '';
   search.dispatchEvent(new Event('input'));
   // Add a pen, give it a new colour: the new pen changes, the default pen it was copied from doesn't.
-  const favs0 = JSON.parse(localStorage.getItem('inkwell:state')).favorites;
+  const favs0 = (await stored()).favorites;
   btn('Pen').click();
   document.querySelector('.fav').click(); // default black pen
   btn('Add a new pen').click();
   await wait(100);
   document.querySelector('.pal[data-color="#e5484d"]').click();
-  dispatchEvent(new Event('pagehide'));
-  const favs1 = JSON.parse(localStorage.getItem('inkwell:state')).favorites;
+  const favs1 = (await stored()).favorites;
   R.addPenAddsOne = favs1.length === favs0.length + 1;
   R.newPenGetsColour = favs1.at(-1).color === '#e5484d';
   R.defaultPenUnchanged = favs1[0].color === favs0[0].color;
@@ -225,11 +233,46 @@ for (const [name, engine, opts] of runs) {
   const page = await (await browser.newContext(opts)).newPage();
   const consoleErrors = [];
   page.on('pageerror', (e) => consoleErrors.push(e.message));
+  // Upgrade check: plant old-style localStorage notes before the app starts (as after an update),
+  // with no IndexedDB yet, and check they move across. Runs once per context.
+  await page.context().addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.clear();
+    indexedDB.deleteDatabase('inkwell'); // queued ahead of the app's own open request
+    const pg = { id: 'p1', title: 'Migrated page', strokes: [], texts: [], background: 'blank', pageColor: 'auto' };
+    const nb = { id: 'n1', name: 'Old notebook', sections: [{ id: 's1', name: 'Old section', color: '#3e63dd', pages: [pg] }] };
+    localStorage.setItem('inkwell:state', JSON.stringify({ notebooks: [nb], notebookId: 'n1', sectionId: 's1', pageId: 'p1' }));
+  });
   await page.goto(URL);
-  await page.evaluate(() => localStorage.clear());
+  await page.waitForSelector('#toolbar .tb-btn');
+  const migration = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 1500));
+    const inDb = await new Promise((resolve) => {
+      const req = indexedDB.open('inkwell');
+      req.onsuccess = () => {
+        const get = req.result.transaction('kv').objectStore('kv').get('inkwell:state');
+        get.onsuccess = () => resolve(get.result);
+      };
+    });
+    return {
+      shown: document.querySelector('.nb-name')?.textContent === 'Old notebook',
+      inIndexedDb: inDb?.notebooks?.[0]?.name === 'Old notebook',
+      oldCopyKeptAsBackup:
+        localStorage.getItem('inkwell:state') === null &&
+        localStorage.getItem('inkwell:state:backup-before-indexeddb') !== null,
+    };
+  });
+  // Then start the feature checks from a fresh page.
+  await page.evaluate(async () => {
+    await new Promise((r) => {
+      const del = indexedDB.deleteDatabase('inkwell');
+      del.onsuccess = del.onerror = del.onblocked = () => r();
+    });
+  });
   await page.reload();
   await page.waitForSelector('#toolbar .tb-btn');
-  const r = await page.evaluate(suite);
+  const r = { ...Object.fromEntries(Object.entries(migration).map(([k, v]) => [`migration_${k}`, v])), ...(await page.evaluate(suite)) };
   const errors = [...r.errors, ...consoleErrors];
   delete r.errors;
   const bad = Object.entries(r).filter(([k, v]) => v === false && k !== 'floodMsPerSample');

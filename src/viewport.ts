@@ -397,20 +397,57 @@ const endPointer = (e: PointerEvent) => {
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 
+// Wheel deltas come in pixels, lines (Firefox on Linux for mouse wheels) or pages; without
+// normalising, a Ctrl+wheel notch in Firefox zoomed ~3% and looked broken.
+const LINE_PX = 16;
+const wheelPx = (d: number, mode: number) =>
+  mode === WheelEvent.DOM_DELTA_LINE
+    ? d * LINE_PX
+    : mode === WheelEvent.DOM_DELTA_PAGE
+      ? d * rect.height
+      : d;
+let safariPinch = false;
+
 canvas.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault();
-    if (e.ctrlKey) {
-      zoomAt(e.clientX - rect.left, e.clientY - rect.top, Math.exp(-e.deltaY * 0.01));
+    const dx = wheelPx(e.deltaX, e.deltaMode);
+    const dy = wheelPx(e.deltaY, e.deltaMode);
+    // Trackpad pinch arrives as Ctrl+wheel (Chrome, Edge, Firefox); Cmd+scroll zooms on macOS.
+    if (e.ctrlKey || e.metaKey) {
+      if (safariPinch) return; // Safari already reported this pinch as a gesture
+      const factor = Math.min(2, Math.max(0.5, Math.exp(-dy * 0.01)));
+      zoomAt(e.clientX - rect.left, e.clientY - rect.top, factor);
     } else {
-      view.x -= e.shiftKey ? e.deltaY : e.deltaX;
-      view.y -= e.shiftKey ? 0 : e.deltaY;
+      view.x -= e.shiftKey ? dy : dx;
+      view.y -= e.shiftKey ? 0 : dy;
       redraw();
     }
   },
   { passive: false },
 );
+
+// Safari and macOS/WKWebView report trackpad pinch only as (non-standard) gesture events, with a
+// cumulative scale. Prevent them everywhere so Safari doesn't zoom the whole page instead.
+type GestureLike = Event & { scale: number; clientX: number; clientY: number };
+let gestureScale = 1;
+addEventListener('gesturestart', (e) => {
+  e.preventDefault();
+  safariPinch = true;
+  gestureScale = 1;
+});
+addEventListener('gesturechange', (e) => {
+  e.preventDefault();
+  const g = e as GestureLike;
+  if (!g.scale || !canvas.parentElement!.contains(e.target as Node)) return;
+  zoomAt(g.clientX - rect.left, g.clientY - rect.top, g.scale / gestureScale);
+  gestureScale = g.scale;
+});
+addEventListener('gestureend', (e) => {
+  e.preventDefault();
+  safariPinch = false;
+});
 
 zoomChip.addEventListener('click', () =>
   openMenu(zoomChip, [

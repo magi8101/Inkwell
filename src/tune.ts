@@ -45,7 +45,7 @@ const SLIDERS: {
     max: 40,
     step: 2,
     unit: 'ms',
-    hint: 'How far ahead the tip is drawn. More hides lag; too much overshoots on sharp turns.',
+    hint: 'Used when "Match prediction to screen refresh" is off. More hides lag; too much overshoots on sharp turns.',
   },
   {
     key: 'palmPx',
@@ -101,7 +101,9 @@ function paint() {
     `ink trail ${inkTrailAvailable() ? 'OS ink trail API on' : 'not available here'}`,
     `pen path  ${inkStats.rawEvents ? 'raw samples (fastest)' : 'frame-aligned events'}`,
     `predict   ${inkStats.predictor}`,
-    `tip draw  ${inkStats.tipMs.toFixed(3)} ms`,
+    `tip draw  ${inkStats.tipMs < 0.1 ? '< 0.1' : inkStats.tipMs.toFixed(2)} ms`,
+    `frame     ${inkStats.frameMs.toFixed(1)} ms (${Math.round(1000 / inkStats.frameMs)} Hz)`,
+    `latency   pen→draw ${inkStats.inputToDrawMs.toFixed(1)} ms · pen→frame ${inkStats.inputToFrameMs.toFixed(1)} ms`,
     `canvas    ${lowLatencyCanvas() ? 'low-latency (desynchronized)' : 'standard'}`,
   ].join('\n');
 }
@@ -129,7 +131,7 @@ function panel(): HTMLElement {
       sync,
     };
   });
-  type BoolKey = 'prediction' | 'inkTrail' | 'hoverPreview' | 'tapGestures';
+  type BoolKey = 'prediction' | 'predictAuto' | 'inkTrail' | 'hoverPreview' | 'tapGestures';
   const toggle = (key: BoolKey, label: string) => {
     const box = h('input', {
       type: 'checkbox',
@@ -147,6 +149,7 @@ function panel(): HTMLElement {
   };
   const toggles = [
     toggle('prediction', 'Draw predicted points'),
+    toggle('predictAuto', 'Match prediction to screen refresh'),
     toggle('inkTrail', 'Windows Ink trail'),
     toggle('hoverPreview', 'Show pen tip while hovering'),
     toggle('tapGestures', 'Two-finger tap undo, three-finger tap redo'),

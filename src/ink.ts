@@ -45,12 +45,41 @@ const RAW_EVENTS = 'onpointerrawupdate' in window;
 const MAX_LEAD_PX = 28; // the predicted lead never extends further than this on screen
 const RAW_HISTORY = 16;
 
-/** Live numbers for the Pen feel panel. */
+/** Live numbers for the Pen feel panel (exponential moving averages, measured while inking). */
 export const inkStats = {
   rawEvents: RAW_EVENTS,
   predictor: 'off' as 'off' | 'browser' | 'built-in',
   tipMs: 0,
+  /** Measured display frame interval. */
+  frameMs: 1000 / 60,
+  /** Pen sample timestamp → its tip drawn (event queueing + our handler). */
+  inputToDrawMs: 0,
+  /** Newest pen sample → start of the frame that shows it (the app's share of latency). */
+  inputToFrameMs: 0,
 };
+const ema = (old: number, v: number, k = 0.15) => old + (v - old) * k;
+
+// One frame probe at a time while inking: measures the refresh interval and how old the newest
+// sample is when the frame is produced. Nothing runs when the pen is idle.
+let probing = false;
+let lastFrameT = 0;
+function probeFrame(a: Gesture) {
+  if (probing) return;
+  probing = true;
+  requestAnimationFrame((t) => {
+    probing = false;
+    if (lastFrameT && t - lastFrameT > 4 && t - lastFrameT < 50) {
+      inkStats.frameMs = ema(inkStats.frameMs, t - lastFrameT);
+    }
+    lastFrameT = t;
+    const head = a.raw[a.raw.length - 1];
+    if (head && t >= head.t) inkStats.inputToFrameMs = ema(inkStats.inputToFrameMs, t - head.t);
+  });
+}
+
+/** How far ahead to predict: one display frame (automatic) or the manual setting. */
+const leadMs = () =>
+  state.tuning.predictAuto ? Math.min(24, Math.max(6, inkStats.frameMs)) : state.tuning.predictMs;
 
 // Windows Ink API (Edge/WebView2): the OS draws the trail under the pen tip between our frames.
 interface InkPresenter {
@@ -269,8 +298,7 @@ function drawTip(a: Gesture) {
   if (state.tuning.prediction && !osTrailActive(a)) {
     // Prefer the browser's own prediction when it's newer than our newest sample.
     const browser = a.predicted[a.predicted.length - 1];
-    const lead =
-      browser && browser.t > head.t ? browser : predict(a.raw, state.tuning.predictMs, MAX_LEAD_PX);
+    const lead = browser && browser.t > head.t ? browser : predict(a.raw, leadMs(), MAX_LEAD_PX);
     if (lead) {
       pts.push(lead);
       inkStats.predictor = lead === browser ? 'browser' : 'built-in';
@@ -296,7 +324,10 @@ function drawTip(a: Gesture) {
     x1: Math.ceil((Math.max(...xs) + pad) * dpr),
     y1: Math.ceil((Math.max(...ys) + pad) * dpr),
   };
-  inkStats.tipMs = inkStats.tipMs * 0.9 + (performance.now() - t0) * 0.1;
+  const now = performance.now();
+  inkStats.tipMs = ema(inkStats.tipMs, now - t0, 0.1);
+  if (now >= head.t) inkStats.inputToDrawMs = ema(inkStats.inputToDrawMs, now - head.t);
+  probeFrame(a);
 }
 
 function eraseAt(a: Gesture, x: number, y: number, r: number): boolean {
@@ -534,6 +565,7 @@ bg.addEventListener('pointerdown', (e) => {
     raw: [],
     predicted: [],
   };
+  lastFrameT = 0; // don't count the idle gap before this stroke as a frame
   const translucent = (mode === 'ink' || mode === 'line') && active.opacity < 1;
   wet.style.opacity = translucent ? String(active.opacity) : '';
   addPoints(active, e);

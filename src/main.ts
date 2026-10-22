@@ -192,7 +192,16 @@ addEventListener('keydown', (e) => {
       '+': () => zoomBy(1.25),
       '-': () => zoomBy(0.8),
     };
-    const run = actions[e.key];
+    // Fall back to physical keys: on some layouts Ctrl/Cmd changes what e.key reports for +/-/0.
+    const byCode: Record<string, string> = {
+      Equal: '=',
+      NumpadAdd: '+',
+      Minus: '-',
+      NumpadSubtract: '-',
+      Digit0: '0',
+      Numpad0: '0',
+    };
+    const run = actions[e.key] ?? actions[byCode[e.code] ?? ''];
     if (run) {
       e.preventDefault();
       run();

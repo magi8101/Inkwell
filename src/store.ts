@@ -82,8 +82,10 @@ export interface Tuning {
   /** Ignore touch for this long after the pen was last seen (ms). */
   penGraceMs: number;
   prediction: boolean;
-  /** How far ahead the built-in predictor guesses the pen tip, ms. */
+  /** How far ahead the built-in predictor guesses the pen tip, ms (when not automatic). */
   predictMs: number;
+  /** Predict one measured display frame ahead (adapts to 60/90/120 Hz screens). */
+  predictAuto: boolean;
   inkTrail: boolean;
   /** Show the pen's mark (size and colour) under a hovering pen tip. */
   hoverPreview: boolean;
@@ -101,6 +103,7 @@ export const DEFAULT_TUNING: Tuning = {
   penGraceMs: 300,
   prediction: true,
   predictMs: 14,
+  predictAuto: true,
   inkTrail: true,
   hoverPreview: true,
   tapGestures: true,

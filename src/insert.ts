@@ -1,7 +1,8 @@
-import { ClipboardPaste, ImagePlus, Images } from 'lucide';
+import { ClipboardPaste, ImagePlus, Images, NotebookText } from 'lucide';
 import { h, icon, openMenu, toast } from './dom';
 import { storePicture } from './images';
 import { insert, takeOverPaste } from './lasso';
+import { importOneNote } from './onenote';
 import { type ImageItem, uid } from './store';
 import { toWorld, view } from './viewport';
 
@@ -51,6 +52,14 @@ async function addPictures(files: Blob[], at: { x: number; y: number }) {
 }
 
 const input = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+// OneNote sections (.one) open as a new, editable section; several at once each become one.
+const oneInput = h('input', { type: 'file', accept: '.one', multiple: true, hidden: true });
+document.body.append(oneInput);
+oneInput.addEventListener('change', async () => {
+  for (const f of [...(oneInput.files ?? [])]) await importOneNote(f);
+  oneInput.value = '';
+});
+const isOneNote = (f: File) => /\.one$/i.test(f.name);
 document.body.append(input);
 input.addEventListener('change', () => {
   void addPictures([...(input.files ?? [])], centre());
@@ -85,6 +94,8 @@ insertButton.addEventListener('click', () =>
   openMenu(insertButton, [
     { label: 'Picture from files…', icon: Images, run: () => input.click() },
     { label: 'Paste picture', icon: ClipboardPaste, run: () => void pasteFromClipboard() },
+    'sep',
+    { label: 'OneNote section (.one)…', icon: NotebookText, run: () => oneInput.click() },
   ]),
 );
 
@@ -99,7 +110,11 @@ stage.addEventListener('drop', (e) => {
   const files = [...(e.dataTransfer?.files ?? [])];
   if (!files.length) return;
   e.preventDefault();
-  void addPictures(files, toWorld(e.clientX, e.clientY));
+  void (async () => {
+    for (const f of files.filter(isOneNote)) await importOneNote(f);
+    const pictures = files.filter((f) => !isOneNote(f));
+    if (pictures.length) await addPictures(pictures, toWorld(e.clientX, e.clientY));
+  })();
 });
 
 // Ctrl/Cmd+V with a picture on the system clipboard (a copied screenshot or photo).

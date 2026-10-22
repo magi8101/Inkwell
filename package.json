@@ -9,14 +9,15 @@
     "web": "vite",
     "web:build": "tsc --noEmit && vite build",
     "lint": "biome check . && tsc --noEmit && npm run lint:rust",
-    "lint:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "lint:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo fmt --manifest-path onenote/Cargo.toml --check && cargo clippy --manifest-path onenote/Cargo.toml --target wasm32-unknown-unknown --no-deps -- -D warnings",
     "format": "biome check --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri",
     "preview": "vite preview",
     "share": "lt --port 4173",
     "check": "node src/stroke.check.ts && node src/shape.check.ts && node src/predict.check.ts",
     "deploy": "npm run web:build && wrangler deploy",
-    "e2e": "node e2e/smoke.mjs"
+    "e2e": "node e2e/smoke.mjs",
+    "build:onenote": "cargo build --manifest-path onenote/Cargo.toml --release --target wasm32-unknown-unknown && cp onenote/target/wasm32-unknown-unknown/release/onenote_import.wasm src/onenote-import.wasm"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.2",

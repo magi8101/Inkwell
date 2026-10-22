@@ -1,7 +1,9 @@
-import type { Stroke } from './store';
+import { SERVER } from './dom';
+import { type Stroke, state } from './store';
 import { bbox, drawStroke } from './stroke';
 
-// Handwriting → text, on this device. Where the browser has the Handwriting Recognition API
+// Handwriting → text. Optionally online (Pen feel → "read handwriting online": a vision model on
+// Inkwell's Cloudflare Worker, free daily allowance), otherwise on this device. Where the browser has the Handwriting Recognition API
 // (Chrome on ChromeOS, some Android) it reads the pen strokes themselves, which is the most
 // accurate. Everywhere else the ink is drawn black on white and read by Tesseract (open-source
 // OCR, loaded on first use; the notes never leave the device). Tesseract is built for print, so
@@ -88,9 +90,30 @@ async function withTesseract(strokes: Stroke[]): Promise<string> {
   }
 }
 
+/** Opt-in: a picture of the ink, read by a vision model on Inkwell's Cloudflare Worker. */
+async function online(strokes: Stroke[]): Promise<string | null> {
+  try {
+    const png = await new Promise<Blob | null>((r) => render(strokes).toBlob(r, 'image/png'));
+    if (!png) return null;
+    const res = await fetch(`${SERVER}/api/ocr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/png' },
+      body: png,
+    });
+    if (!res.ok) return null;
+    return ((await res.json()) as { text?: string }).text?.trim() ?? null;
+  } catch {
+    return null; // offline, or the free daily allowance is used up: read on the device instead
+  }
+}
+
 /** Reads handwriting. Highlighter marks are ignored. */
 export async function recognizeInk(strokes: Stroke[]): Promise<string> {
   const ink = strokes.filter((s) => s.tool === 'pen');
   if (!ink.length) return '';
+  if (state.tuning.ocrOnline) {
+    const text = await online(ink);
+    if (text !== null) return text;
+  }
   return (await withHandwritingApi(ink)) ?? (await withTesseract(ink));
 }

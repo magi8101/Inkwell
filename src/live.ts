@@ -1,5 +1,5 @@
 import { Copy, LogOut, Radio, Users } from 'lucide';
-import { h, icon, toast, togglePopover } from './dom';
+import { h, icon, SERVER, toast, togglePopover } from './dom';
 import {
   type Background,
   type Notebook,
@@ -23,12 +23,6 @@ import { toScreen, toWorld } from './viewport';
 // The relay is the Cloudflare Worker (worker/index.ts).
 
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no look-alikes (0/O, 1/I/L)
-const SITE = 'https://inkwell.sharmamagi0.workers.dev';
-// The installed apps (and file:// pages) talk to the public site; the web app to its own origin.
-const ORIGIN =
-  /^https?:$/.test(location.protocol) && !('__TAURI_INTERNALS__' in window)
-    ? location.origin
-    : SITE;
 const BATCH_BYTES = 200_000;
 
 interface Peer {
@@ -304,7 +298,7 @@ function applyMeta(p: Page, meta: unknown) {
 
 function connect(code: string, host: boolean) {
   const ws = new WebSocket(
-    `${ORIGIN.replace(/^http/, 'ws')}/api/live/${code}?role=${host ? 'host' : 'guest'}`,
+    `${SERVER.replace(/^http/, 'ws')}/api/live/${code}?role=${host ? 'host' : 'guest'}`,
   );
   session = {
     ws,

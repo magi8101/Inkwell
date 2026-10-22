@@ -3,6 +3,12 @@ import { createElement, type IconNode } from 'lucide';
 type Child = Node | string | null | undefined | false;
 
 /** macOS users see ⌘ where the shortcut uses Cmd (Ctrl shortcuts accept either key). */
+/** Inkwell's server (live sessions, online handwriting reading). The installed apps and file://
+ * pages use the public site; the web app its own origin. */
+export const SERVER =
+  /^https?:$/.test(location.protocol) && !('__TAURI_INTERNALS__' in window)
+    ? location.origin
+    : 'https://inkwell.sharmamagi0.workers.dev';
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const keys = (s: string) =>
   IS_MAC ? s.replaceAll('Ctrl+', '⌘').replaceAll('Ctrl/Cmd', '⌘') : s;

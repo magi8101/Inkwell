@@ -133,7 +133,13 @@ function panel(): HTMLElement {
       sync,
     };
   });
-  type BoolKey = 'prediction' | 'predictAuto' | 'inkTrail' | 'hoverPreview' | 'tapGestures';
+  type BoolKey =
+    | 'prediction'
+    | 'predictAuto'
+    | 'inkTrail'
+    | 'hoverPreview'
+    | 'tapGestures'
+    | 'ocrOnline';
   const toggle = (key: BoolKey, label: string) => {
     const box = h('input', {
       type: 'checkbox',
@@ -154,6 +160,10 @@ function panel(): HTMLElement {
     toggle('predictAuto', 'Match prediction to screen refresh'),
     toggle('inkTrail', 'Windows Ink trail'),
     toggle('hoverPreview', 'Show pen tip while hovering'),
+    toggle(
+      'ocrOnline',
+      'Convert to text: read handwriting online (Cloudflare AI, more accurate; sends a picture of the selected ink)',
+    ),
     toggle('tapGestures', 'Two-finger tap undo, three-finger tap redo'),
   ];
   /** A labelled row of choices for one setting. */

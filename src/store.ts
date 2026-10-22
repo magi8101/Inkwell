@@ -119,6 +119,8 @@ export interface Tuning {
   cursor: 'dot' | 'crosshair' | 'none' | 'custom';
   /** The custom cursor: a 32 px PNG data URL. */
   cursorImage: string;
+  /** Convert to text: read handwriting with Cloudflare AI online (more accurate) instead of on the device. */
+  ocrOnline: boolean;
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -137,6 +139,7 @@ export const DEFAULT_TUNING: Tuning = {
   eraserEnd: 'eraser',
   cursor: 'dot',
   cursorImage: '',
+  ocrOnline: false,
 };
 
 export interface State {

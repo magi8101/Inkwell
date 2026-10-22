@@ -11,6 +11,7 @@ import { DurableObject } from 'cloudflare:workers';
 interface Env {
   LIVE: DurableObjectNamespace<LiveSession>;
   ASSETS: Fetcher;
+  AI: Ai;
 }
 
 /** Codes avoid look-alike characters (0/O, 1/I/L). */
@@ -29,9 +30,61 @@ export default {
       }
       return env.LIVE.get(env.LIVE.idFromName(code)).fetch(req);
     }
+    if (url.pathname === '/api/ocr') return readHandwriting(req, env);
     return env.ASSETS.fetch(req);
   },
 } satisfies ExportedHandler<Env>;
+
+// --- Handwriting → text with Workers AI (opt-in in the app; free daily allowance) ---
+
+const OCR_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+const OCR_PROMPT =
+  'Transcribe the handwritten text in this image exactly as written, keeping the line breaks. ' +
+  'Reply with only the text itself, no quotes or comments. If there is no readable text, reply with nothing.';
+const MAX_IMAGE = 3_000_000;
+// Only Inkwell itself may use this (the website and the desktop/mobile apps), so others can't
+// spend the account's free allowance. ponytail: an Origin check stops casual reuse, not a
+// determined script; add a per-IP limit if it ever gets abused.
+const APP_ORIGINS =
+  /^(https:\/\/inkwell\.sharmamagi0\.workers\.dev|tauri:\/\/localhost|https?:\/\/tauri\.localhost|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)$/;
+
+async function readHandwriting(req: Request, env: Env): Promise<Response> {
+  const origin = req.headers.get('Origin') ?? '';
+  const cors = { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' };
+  if (!APP_ORIGINS.test(origin)) return new Response('Not allowed', { status: 403 });
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        ...cors,
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }
+  if (req.method !== 'POST' || req.headers.get('Content-Type') !== 'image/png') {
+    return new Response('Send a PNG', { status: 400, headers: cors });
+  }
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (!bytes.length || bytes.length > MAX_IMAGE)
+    return new Response('Image too large', { status: 413, headers: cors });
+  const ask = () =>
+    env.AI.run(OCR_MODEL, {
+      prompt: OCR_PROMPT,
+      image: [...bytes],
+      max_tokens: 512,
+      temperature: 0,
+    });
+  let out: { response?: string };
+  try {
+    out = await ask();
+  } catch (e) {
+    // Meta's licence for this model has to be accepted once per account (the owner agreed to it).
+    if (!/agree/i.test(String(e))) return new Response(String(e), { status: 502, headers: cors });
+    await env.AI.run(OCR_MODEL, { prompt: 'agree' });
+    out = await ask();
+  }
+  return Response.json({ text: (out.response ?? '').trim() }, { headers: cors });
+}
 
 const ADJECTIVES = [
   'Amber',

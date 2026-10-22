@@ -1,4 +1,12 @@
-export type Tool = 'pen' | 'highlighter' | 'eraser' | 'pixelEraser' | 'lasso' | 'text' | 'ruler';
+export type Tool =
+  | 'pen'
+  | 'highlighter'
+  | 'eraser'
+  | 'pixelEraser'
+  | 'lasso'
+  | 'text'
+  | 'ruler'
+  | 'laser';
 export type InkTool = 'pen' | 'highlighter';
 export type Background = 'blank' | 'grid' | 'dots' | 'lines';
 

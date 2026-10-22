@@ -7,6 +7,7 @@ import { openRadial } from './radial';
 import { addPage, search } from './sidebar';
 import { type Background, onSaveError, page, state, subscribe, type Tool, update } from './store';
 import './lasso';
+import './laser';
 import './text';
 import { setTool } from './toolbar';
 import { openTuning, tuneButton } from './tune';
@@ -146,6 +147,7 @@ const TOOL_KEYS: Record<string, Tool> = {
   l: 'lasso',
   t: 'text',
   r: 'ruler',
+  k: 'laser',
 };
 addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement;

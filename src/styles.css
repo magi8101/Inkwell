@@ -88,12 +88,14 @@ button:disabled {
   overflow: hidden;
 }
 
-#live {
+#live,
+#laser {
   pointer-events: none;
 }
 
 #bg,
-#live {
+#live,
+#laser {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -774,6 +776,14 @@ button:disabled {
 }
 
 /* ---------- Text boxes ---------- */
+
+#laser {
+  z-index: 15;
+}
+
+body[data-tool="laser"] #bg {
+  cursor: none;
+}
 
 #texts {
   position: absolute;

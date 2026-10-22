@@ -7,6 +7,7 @@ import {
   type IconNode,
   LassoSelect,
   Pen,
+  Presentation,
   Redo2,
   Ruler,
   Shapes,
@@ -28,6 +29,7 @@ export const TOOLS: { id: Tool; label: string; key: string; icon: IconNode }[] =
   { id: 'lasso', label: 'Lasso select', key: 'L', icon: LassoSelect },
   { id: 'text', label: 'Text box', key: 'T', icon: Type },
   { id: 'ruler', label: 'Ruler and straight line', key: 'R', icon: Ruler },
+  { id: 'laser', label: 'Laser pointer', key: 'K', icon: Presentation },
 ];
 const MAX_FAVORITES = 10;
 

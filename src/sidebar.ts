@@ -26,6 +26,7 @@ import {
   subscribe,
   uid,
   update,
+  whenIdle,
 } from './store';
 import { bbox } from './stroke';
 import { drawPage } from './viewport';
@@ -440,5 +441,14 @@ function render() {
   );
 }
 
-subscribe(render);
+// The sidebar (lists and thumbnails) refreshes when idle, so it never delays the pen.
+let renderPending = false;
+subscribe(() => {
+  if (renderPending) return;
+  renderPending = true;
+  whenIdle(() => {
+    renderPending = false;
+    render();
+  });
+});
 render();

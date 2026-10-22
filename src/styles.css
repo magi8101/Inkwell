@@ -88,13 +88,17 @@ button:disabled {
   overflow: hidden;
 }
 
+#wet,
 #live,
+#tip,
 #laser {
   pointer-events: none;
 }
 
 #bg,
+#wet,
 #live,
+#tip,
 #laser {
   position: absolute;
   inset: 0;

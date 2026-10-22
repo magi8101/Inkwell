@@ -1,6 +1,6 @@
 import { Gauge } from 'lucide';
 import { h, icon, togglePopover } from './dom';
-import { inkTrailAvailable, lowLatencyCanvas } from './ink';
+import { inkStats, inkTrailAvailable, lowLatencyCanvas } from './ink';
 import { DEFAULT_TUNING, state, subscribe, type Tuning, update } from './store';
 
 type NumKey = { [K in keyof Tuning]: Tuning[K] extends number ? K : never }[keyof Tuning];
@@ -37,6 +37,15 @@ const SLIDERS: {
     max: 2.5,
     step: 0.1,
     hint: 'Below 1: light touch already thick. Above 1: need to press harder.',
+  },
+  {
+    key: 'predictMs',
+    label: 'Predict',
+    min: 0,
+    max: 40,
+    step: 2,
+    unit: 'ms',
+    hint: 'How far ahead the tip is drawn. More hides lag; too much overshoots on sharp turns.',
   },
   {
     key: 'palmPx',
@@ -90,6 +99,9 @@ function paint() {
   readout.textContent = [
     lastEvent || 'Move the pen or a finger over the page…',
     `ink trail ${inkTrailAvailable() ? 'OS ink trail API on' : 'not available here'}`,
+    `pen path  ${inkStats.rawEvents ? 'raw samples (fastest)' : 'frame-aligned events'}`,
+    `predict   ${inkStats.predictor}`,
+    `tip draw  ${inkStats.tipMs.toFixed(3)} ms`,
     `canvas    ${lowLatencyCanvas() ? 'low-latency (desynchronized)' : 'standard'}`,
   ].join('\n');
 }

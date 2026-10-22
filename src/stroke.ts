@@ -54,6 +54,13 @@ export function svgPath(st: Stroke, dx: number, dy: number): string {
   return `${d} Z`;
 }
 
+/** Stroke diameter perfect-freehand would draw at this pressure (for the fast wet-ink tip). */
+export function tipDiameter(s: Shape, pressure: number): number {
+  const thin = s.tool === 'pen' && s.pressure ? tuning.thinning : 0;
+  const t = 0.5 - thin * (0.5 - pressure);
+  return 2 * s.width * (tuning.gamma === 1 ? t : t ** tuning.gamma);
+}
+
 let paths = new WeakMap<Stroke, Path2D>();
 
 /** Changing how pressure maps to width re-shapes every stroke, so cached outlines are dropped. */

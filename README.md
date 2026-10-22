@@ -28,6 +28,13 @@ npm run check      # eraser geometry self-test
 npm run format     # auto-fix formatting
 ```
 
+## Low-latency ink
+
+Modelled on Windows Ink, which draws "wet" ink on a high-priority path and "dries" it later:
+- **Windows (Edge/Chrome/WebView2):** the OS ink trail (`navigator.ink`) draws the newest segment in the system compositor, as Microsoft designed it.
+- **macOS, Linux and other browsers:** two wet-ink layers. The full pressure stroke is redrawn each frame; a fast tip from its end to the newest raw pen sample (`pointerrawupdate` where supported) plus a predicted lead is redrawn on every sample, on a `desynchronized` canvas. Prediction is a least-squares velocity fit (`src/predict.ts`) used when the browser offers none; tune it with _Predict_ in the Pen feel panel.
+- **Drying off the input path:** saving and the sidebar refresh run when idle (and are flushed when the page is hidden), so lifting the pen costs well under a millisecond and never delays the next stroke.
+
 ## Using it
 
 - **Pen draws, fingers navigate.** Until a pen is detected, one finger (or the mouse) draws; two fingers pan and pinch-zoom. Middle mouse pans, Ctrl+wheel zooms.

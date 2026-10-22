@@ -82,6 +82,8 @@ export interface Tuning {
   /** Ignore touch for this long after the pen was last seen (ms). */
   penGraceMs: number;
   prediction: boolean;
+  /** How far ahead the built-in predictor guesses the pen tip, ms. */
+  predictMs: number;
   inkTrail: boolean;
   /** Show the pen's mark (size and colour) under a hovering pen tip. */
   hoverPreview: boolean;
@@ -98,6 +100,7 @@ export const DEFAULT_TUNING: Tuning = {
   palmPx: 100,
   penGraceMs: 300,
   prediction: true,
+  predictMs: 14,
   inkTrail: true,
   hoverPreview: true,
   tapGestures: true,
@@ -260,9 +263,18 @@ export function subscribe(fn: () => void): () => void {
   return () => listeners.delete(fn);
 }
 
-export function update(fn: (s: State) => void) {
-  fn(state);
-  fixSelection(state);
+// Saving serialises the whole notebook, which grows with every stroke. Like Windows Ink drying
+// ink off the input path, it runs when the app is idle instead of on every pen lift, so the next
+// stroke's first samples are never held up. It is flushed immediately when the page is hidden or
+// closed, so nothing is lost.
+export const whenIdle: (fn: () => void) => void =
+  'requestIdleCallback' in window
+    ? (fn) => requestIdleCallback(fn, { timeout: 1000 })
+    : (fn) => setTimeout(fn, 300);
+let savePending = false;
+
+export function saveNow() {
+  savePending = false;
   try {
     localStorage.setItem(KEY, JSON.stringify({ ...state, query: undefined }));
     saveFailed = false;
@@ -273,6 +285,27 @@ export function update(fn: (s: State) => void) {
       for (const l of saveErrorListeners) l();
     }
   }
+}
+
+function scheduleSave() {
+  if (savePending) return;
+  savePending = true;
+  whenIdle(() => {
+    if (savePending) saveNow();
+  });
+}
+const flush = () => {
+  if (savePending) saveNow();
+};
+addEventListener('pagehide', flush);
+addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flush();
+});
+
+export function update(fn: (s: State) => void) {
+  fn(state);
+  fixSelection(state);
+  scheduleSave();
   applyTheme();
   for (const l of listeners) l();
 }

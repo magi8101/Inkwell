@@ -1,21 +1,56 @@
 import { capture, h } from './dom';
+import { predict, type Sample } from './predict';
 import { densify, recognize } from './shape';
 import { inkTool, page, type Stroke, state, subscribe, type TextBox, uid, update } from './store';
-import { cut, hits, inkColor, outline } from './stroke';
+import { cut, hits, inkColor, outline, tipDiameter } from './stroke';
 import { isPalm, pageIsDark, penSeen, redraw, touchCount, toWorld, view } from './viewport';
 
 const MAX_HISTORY = 500;
 
 const bg = document.querySelector<HTMLCanvasElement>('#bg')!;
+// Wet ink (the stroke being drawn) uses two layers above the page, both `desynchronized` so
+// Chromium can skip the compositor:
+//  - live: the full, smoothed, pressure-shaped stroke, redrawn once per frame (pointermove);
+//  - tip: a short segment from the end of that stroke to the pen's newest raw position, plus a
+//    predicted lead, redrawn on every pen sample (pointerrawupdate where supported) with only
+//    its own small area cleared. This recreates what Windows' OS ink trail does — ink under the
+//    pen before the app's next frame — on macOS, Linux and every browser.
+// Translucent strokes put their opacity on the wrapper, so where the layers overlap it doesn't
+// double up.
+const wet = document.querySelector<HTMLDivElement>('#wet')!;
 const live = document.querySelector<HTMLCanvasElement>('#live')!;
-// The stroke in progress gets its own layer; `desynchronized` lets Chromium skip the compositor.
-const ctx = live.getContext('2d', { desynchronized: true })!;
+const tip = document.querySelector<HTMLCanvasElement>('#tip')!;
+// Where the OS ink trail exists (Edge/WebView2 on Windows) it is the fast path, and its spec says
+// not to combine it with desynchronized canvases or app-side prediction — so only use those
+// everywhere else. (A canvas's mode is fixed at creation, hence the check up front.)
+// Other platforms may expose navigator.ink too, but it isn't documented to draw an OS trail
+// there, so they get our own verified pipeline instead.
+type UAData = { userAgentData?: { platform?: string } };
+const IS_WINDOWS =
+  (navigator as Navigator & UAData).userAgentData?.platform === 'Windows' ||
+  /Windows/.test(navigator.userAgent);
+const OS_TRAIL = IS_WINDOWS && 'ink' in navigator;
+const ctx = live.getContext('2d', { desynchronized: !OS_TRAIL })!;
+const tctx = tip.getContext('2d', { desynchronized: !OS_TRAIL })!;
 let dpr = devicePixelRatio;
 new ResizeObserver(() => {
   dpr = devicePixelRatio;
-  live.width = Math.round(live.clientWidth * dpr);
-  live.height = Math.round(live.clientHeight * dpr);
+  for (const c of [live, tip]) {
+    c.width = Math.round(c.clientWidth * dpr);
+    c.height = Math.round(c.clientHeight * dpr);
+  }
 }).observe(live);
+
+const RAW_EVENTS = 'onpointerrawupdate' in window;
+const MAX_LEAD_PX = 28; // the predicted lead never extends further than this on screen
+const RAW_HISTORY = 16;
+
+/** Live numbers for the Pen feel panel. */
+export const inkStats = {
+  rawEvents: RAW_EVENTS,
+  predictor: 'off' as 'off' | 'browser' | 'built-in',
+  tipMs: 0,
+};
 
 // Windows Ink API (Edge/WebView2): the OS draws the trail under the pen tip between our frames.
 interface InkPresenter {
@@ -25,12 +60,14 @@ type InkNavigator = Navigator & {
   ink?: { requestPresenter(o: { presentationArea: Element }): Promise<InkPresenter> };
 };
 let presenter: InkPresenter | null = null;
-(navigator as InkNavigator).ink?.requestPresenter({ presentationArea: live }).then(
-  (p) => {
-    presenter = p;
-  },
-  () => {},
-);
+(OS_TRAIL ? (navigator as InkNavigator).ink : undefined)
+  ?.requestPresenter({ presentationArea: live })
+  .then(
+    (p) => {
+      presenter = p;
+    },
+    () => {},
+  );
 
 // --- Undo/redo: each entry is a snapshot of the page's strokes and text boxes. Both lists are
 // replaced, never mutated, so a snapshot is just two array references. ---
@@ -110,6 +147,12 @@ interface Gesture {
   shape: number[][] | null;
   /** Side-button gesture: does nothing until it moves; a quick still press is a tap (tool ring). */
   barrel: { x: number; y: number; t: number; armed: boolean } | null;
+  /** Canvas-relative position of the canvas, captured at pen-down (raw events lack offsetX). */
+  origin: { left: number; top: number };
+  /** Newest raw pen samples in canvas px, for the fast tip and prediction. */
+  raw: (Sample & { p: number; seen?: boolean })[];
+  /** The browser's own predicted points from the latest frame, canvas px (if it gives any). */
+  predicted: Sample[];
 }
 
 const BARREL_SLOP_PX = 6;
@@ -133,7 +176,7 @@ function snapShape(a: Gesture) {
   a.shape = found.strokes;
   clearLive();
   ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
-  ctx.globalAlpha = a.opacity;
+  ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
   ctx.fillStyle = inkColor(a.color, pageIsDark());
   for (const pts of a.shape) ctx.fill(outline(pts, { ...a, pressure: false }, true));
 }
@@ -161,6 +204,99 @@ const round = (n: number) => Math.round(n * 100) / 100;
 function clearLive() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, live.width, live.height);
+  tctx.setTransform(1, 0, 0, 1, 0, 0);
+  tctx.clearRect(0, 0, tip.width, tip.height);
+  tipBox = null;
+}
+
+// --- Fast tip ---
+
+/** The Windows OS trail is drawing this stroke's newest segment for us. */
+const osTrailActive = (a: Gesture) =>
+  presenter !== null && state.tuning.inkTrail && a.tool === 'pen' && a.opacity === 1;
+
+let tipBox: { x0: number; y0: number; x1: number; y1: number } | null = null;
+
+function addRaw(a: Gesture, e: PointerEvent) {
+  const evs = e.getCoalescedEvents?.();
+  for (const ev of evs?.length ? evs : [e]) {
+    const x = ev.clientX - a.origin.left;
+    const y = ev.clientY - a.origin.top;
+    const last = a.raw[a.raw.length - 1];
+    // Skip samples already seen via pointerrawupdate (same time and place), or out of order.
+    // Timestamps alone aren't unique: coarse timers can give two real samples the same time.
+    if (
+      last &&
+      (ev.timeStamp < last.t || (ev.timeStamp === last.t && x === last.x && y === last.y))
+    ) {
+      continue;
+    }
+    a.raw.push({ x, y, t: ev.timeStamp, p: ev.pressure || 0.5 });
+  }
+  // Trim history, but never a sample that isn't in the stroke yet (it would be lost on lift).
+  while (a.raw.length > RAW_HISTORY && a.raw[0]!.seen) a.raw.shift();
+}
+
+/** This sample (and everything before it) is now part of the smoothed stroke. */
+function markSeen(a: Gesture, ev: PointerEvent) {
+  const x = ev.clientX - a.origin.left;
+  const y = ev.clientY - a.origin.top;
+  for (let i = a.raw.length - 1; i >= 0; i--) {
+    const r = a.raw[i]!;
+    if (r.t === ev.timeStamp && r.x === x && r.y === y) {
+      for (let k = 0; k <= i; k++) a.raw[k]!.seen = true;
+      return;
+    }
+  }
+}
+
+/** Bridge from the smoothed stroke's end to the newest raw sample, then the predicted lead. */
+function drawTip(a: Gesture) {
+  const t0 = performance.now();
+  if (tipBox) {
+    tctx.setTransform(1, 0, 0, 1, 0, 0);
+    tctx.clearRect(tipBox.x0, tipBox.y0, tipBox.x1 - tipBox.x0, tipBox.y1 - tipBox.y0);
+    tipBox = null;
+  }
+  const n = a.points.length;
+  const head = a.raw[a.raw.length - 1];
+  if (a.mode !== 'ink' || a.shape || !n || !head) return;
+  const pts: Sample[] = [
+    { x: a.points[n - 3]! * view.scale + view.x, y: a.points[n - 2]! * view.scale + view.y, t: 0 },
+    head,
+  ];
+  inkStats.predictor = 'off';
+  if (state.tuning.prediction && !osTrailActive(a)) {
+    // Prefer the browser's own prediction when it's newer than our newest sample.
+    const browser = a.predicted[a.predicted.length - 1];
+    const lead =
+      browser && browser.t > head.t ? browser : predict(a.raw, state.tuning.predictMs, MAX_LEAD_PX);
+    if (lead) {
+      pts.push(lead);
+      inkStats.predictor = lead === browser ? 'browser' : 'built-in';
+    }
+  }
+  const w = Math.max(1, tipDiameter(a, head.p) * view.scale);
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tctx.globalAlpha = 1;
+  tctx.strokeStyle = inkColor(a.color, pageIsDark());
+  tctx.lineWidth = w;
+  tctx.lineCap = 'round';
+  tctx.lineJoin = 'round';
+  tctx.beginPath();
+  tctx.moveTo(pts[0]!.x, pts[0]!.y);
+  for (const p of pts.slice(1)) tctx.lineTo(p.x, p.y);
+  tctx.stroke();
+  const pad = w / 2 + 2;
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  tipBox = {
+    x0: Math.floor((Math.min(...xs) - pad) * dpr),
+    y0: Math.floor((Math.min(...ys) - pad) * dpr),
+    x1: Math.ceil((Math.max(...xs) + pad) * dpr),
+    y1: Math.ceil((Math.max(...ys) + pad) * dpr),
+  };
+  inkStats.tipMs = inkStats.tipMs * 0.9 + (performance.now() - t0) * 0.1;
 }
 
 function eraseAt(a: Gesture, x: number, y: number, r: number): boolean {
@@ -190,6 +326,8 @@ function addPoints(a: Gesture, e: PointerEvent) {
     const prev = a.last;
     a.last = { x: w.x, y: w.y, p: pr };
     if (a.mode === 'ink') {
+      addRaw(a, ev);
+      markSeen(a, ev);
       const n = a.points.length;
       if (!n) {
         a.points.push(round(w.x), round(w.y), round(pr));
@@ -264,7 +402,7 @@ function drawLive(a: Gesture, e: PointerEvent) {
   clearLive();
   if (a.mode === 'line') {
     ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
-    ctx.globalAlpha = a.opacity;
+    ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
     ctx.fillStyle = inkColor(a.color, pageIsDark());
     ctx.fill(outline(a.points, { ...a, pressure: false }, true));
     drawRulerLabel(a);
@@ -279,26 +417,25 @@ function drawLive(a: Gesture, e: PointerEvent) {
     ctx.stroke();
     return;
   }
-  // Predicted points hide a frame of latency; they are drawn but never saved.
-  let pts = a.points;
-  const predicted = state.tuning.prediction ? (e.getPredictedEvents?.() ?? []) : [];
-  if (predicted.length) {
-    pts = pts.slice();
-    for (const p of predicted) {
-      const w = toWorld(p.clientX, p.clientY);
-      pts.push(w.x, w.y, p.pressure || 0.5);
-    }
-  }
+  // Predicted points hide latency; they're drawn on the tip layer and never saved.
+  a.predicted = state.tuning.prediction
+    ? (e.getPredictedEvents?.() ?? []).map((p) => ({
+        x: p.clientX - a.origin.left,
+        y: p.clientY - a.origin.top,
+        t: p.timeStamp,
+      }))
+    : [];
   const color = inkColor(a.color, pageIsDark());
   ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
-  ctx.globalAlpha = a.opacity;
+  ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
   ctx.fillStyle = color;
-  ctx.fill(outline(pts, a, false));
-  if (presenter && state.tuning.inkTrail && a.tool === 'pen' && a.opacity === 1) {
+  ctx.fill(outline(a.points, a, false));
+  drawTip(a);
+  if (presenter && osTrailActive(a)) {
     try {
       presenter.updateInkTrailStartPoint(e, {
         color,
-        diameter: Math.max(1, a.width * view.scale * (e.pressure || 0.5)),
+        diameter: Math.max(1, tipDiameter(a, e.pressure || 0.5) * view.scale),
       });
     } catch {
       // The OS trail is a bonus; it must never break drawing (it rejects synthetic events, too).
@@ -350,13 +487,25 @@ function finish(keep: boolean) {
     if (a.last && n && (points[n - 3] !== round(a.last.x) || points[n - 2] !== round(a.last.y))) {
       points.push(round(a.last.x), round(a.last.y), round(a.last.p));
     }
+    // Raw samples newer than the last frame were already shown by the fast tip; keep them so
+    // the stroke doesn't shrink back when the pen lifts.
+    for (const r of a.raw) {
+      if (r.seen) continue;
+      points.push(
+        round((r.x - view.x) / view.scale),
+        round((r.y - view.y) / view.scale),
+        round(r.p),
+      );
+    }
     commit(a.before, [...a.before, { id: uid(), tool, color, width, opacity, pressure, points }]);
   } else {
     commit(a.before, page().strokes);
   }
   // Clear after the main canvas has painted the committed stroke, so it never blinks.
   requestAnimationFrame(() => {
-    if (!active) clearLive(); // a new stroke may already have started this frame
+    if (active) return; // a new stroke may already have started this frame
+    clearLive();
+    wet.style.opacity = '';
   });
 }
 
@@ -381,13 +530,28 @@ bg.addEventListener('pointerdown', (e) => {
       e.pointerType === 'pen' && (e.button === 2 || e.buttons & 2)
         ? { x: e.clientX, y: e.clientY, t: performance.now(), armed: false }
         : null,
+    origin: (({ left, top }) => ({ left, top }))(bg.getBoundingClientRect()),
+    raw: [],
+    predicted: [],
   };
+  const translucent = (mode === 'ink' || mode === 'line') && active.opacity < 1;
+  wet.style.opacity = translucent ? String(active.opacity) : '';
   addPoints(active, e);
 });
 
 bg.addEventListener('pointermove', (e) => {
   if (active?.id === e.pointerId) addPoints(active, e);
 });
+// Raw samples arrive as soon as the hardware reports them instead of once per frame; they only
+// move the fast tip. The smoothed stroke still updates on the frame-aligned pointermove.
+if (RAW_EVENTS) {
+  bg.addEventListener('pointerrawupdate' as 'pointermove', (e) => {
+    const a = active;
+    if (!a || a.id !== e.pointerId || a.mode !== 'ink' || a.shape || a.barrel) return;
+    addRaw(a, e);
+    drawTip(a);
+  });
+}
 bg.addEventListener('pointerup', (e) => {
   if (active?.id === e.pointerId) finish(true);
 });

@@ -1,4 +1,5 @@
 import { Gauge } from 'lucide';
+import { openCalibration } from './calibrate';
 import { h, icon, togglePopover } from './dom';
 import { inkStats, inkTrailAvailable, lowLatencyCanvas } from './ink';
 import { DEFAULT_TUNING, state, subscribe, type Tuning, update } from './store';
@@ -197,6 +198,17 @@ function panel(): HTMLElement {
     ...toggles.map((t) => t.el),
     side.el,
     readout,
+    h(
+      'button',
+      {
+        class: 'menu-item',
+        onclick: () => {
+          openTuning(); // closes this panel
+          openCalibration();
+        },
+      },
+      'Calibrate my pen…',
+    ),
     h(
       'button',
       {

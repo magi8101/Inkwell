@@ -245,6 +245,79 @@ async function suite() {
   R.addPenAddsOne = favs1.length === favs0.length + 1;
   R.newPenGetsColour = favs1.at(-1).color === '#e5484d';
   R.defaultPenUnchanged = favs1[0].color === favs0[0].color;
+  // Pen calibration: run every step with synthetic pen/touch input, apply, and share the report.
+  btn('Pen feel and palm settings').click();
+  await wait(100);
+  [...document.querySelectorAll('.tune-panel button')].find((b) => b.textContent === 'Calibrate my pen…').click();
+  const pad = document.querySelector('.cal-pad');
+  await wait(100);
+  const at = (fx, fy) => {
+    const r = pad.getBoundingClientRect();
+    return [r.left + r.width * fx, r.top + r.height * fy];
+  };
+  const calEv = (type, [x, y], o = {}) =>
+    pad.dispatchEvent(
+      new PointerEvent(type, {
+        pointerId: o.id ?? pid,
+        pointerType: o.type ?? 'pen',
+        clientX: x,
+        clientY: y,
+        button: type === 'pointermove' ? -1 : (o.button ?? 0),
+        buttons: type === 'pointerup' ? 0 : (o.buttons ?? 1),
+        pressure: o.p ?? 0.5,
+        width: o.size ?? 1,
+        height: o.size ?? 1,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  const calStroke = async (pts, o = {}, gap = 0) => {
+    pid++;
+    calEv('pointerdown', pts[0], o);
+    for (const p of pts.slice(1)) {
+      calEv('pointermove', p, o);
+      if (gap) await wait(gap);
+    }
+    calEv('pointerup', pts.at(-1), o);
+  };
+  calEv('pointermove', at(0.5, 0.5), { buttons: 0 }); // 1. hover
+  await wait(900);
+  const stillPts = Array.from({ length: 220 }, (_, i) => at(0.5 + (i % 2) * 0.0005, 0.5)); // 2. hold still
+  await calStroke(stillPts, {}, 10);
+  await wait(900);
+  const writing = Array.from({ length: 170 }, (_, i) => at(0.1 + i * 0.004, 0.6 + Math.sin(i / 3) * 0.05));
+  await calStroke(writing, { p: 0.2 }); // 3. light
+  await wait(900);
+  await calStroke(writing, { p: 0.8 }); // 4. firm
+  await wait(900);
+  const ring = Array.from({ length: 320 }, (_, i) => at(0.5 + 0.3 * Math.cos(i / 20), 0.5 + 0.3 * Math.sin(i / 20)));
+  await calStroke(ring, {}, 4); // 5. fast circles
+  await wait(900);
+  for (let i = 0; i < 10; i++) calEv('pointerdown', at(0.5, 0.5), { type: 'touch', id: 900 + i, size: 180 }); // 6. palm
+  await wait(900);
+  for (let i = 0; i < 3; i++) calEv('pointerdown', at(0.5, 0.5), { type: 'touch', id: 950 + i, size: 40 }); // 7. finger
+  await wait(900);
+  await calStroke([at(0.4, 0.4), at(0.41, 0.4)], { button: 2, buttons: 2 }); // 8. side button…
+  await calStroke([at(0.4, 0.4), at(0.41, 0.4)], { button: 5, buttons: 32 }); // …and eraser end
+  await wait(900);
+  R.calibrationFinishes = document.querySelector('.cal-title')?.textContent === 'Your pen is calibrated';
+  let report = '';
+  Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true });
+  Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: async (t) => (report = t) },
+    configurable: true,
+  });
+  document.querySelector('.cal-foot button.primary').click();
+  [...document.querySelectorAll('.cal-foot button')].find((b) => b.textContent.startsWith('Share')).click();
+  await wait(100);
+  const tuning = (await stored()).tuning;
+  R.calibrationSetsPalm = tuning.palmPx === 110;
+  R.calibrationSetsPressure = tuning.thinning !== 0.55 || tuning.pressureGamma !== 1;
+  R.calibrationSetsPrediction = tuning.predictAuto === false;
+  R.calibrationReport = report.includes('DELAY (stylus → screen)') && report.includes('CALIBRATION (applied)');
+  document.querySelector('.cal-close').click();
+  R.calibrationCloses = !document.querySelector('.cal-overlay');
   R.errors = errors;
   return R;
 }

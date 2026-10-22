@@ -1585,3 +1585,116 @@ button.twisty:hover {
   height: 24px;
   rotate: 90deg;
 }
+
+/* ---------- Code blocks ---------- */
+
+.codeblock {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.code-head .tb-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.code-libs.on {
+  color: var(--accent-text);
+}
+
+.code-grip {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 36px;
+  color: var(--text-2);
+  cursor: grab;
+  touch-action: none;
+}
+
+.code-lang,
+.code-compiler {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.code-compiler {
+  flex: 1;
+}
+
+.code-run {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--surface);
+  font-weight: 600;
+}
+
+.code-src,
+.code-out {
+  margin: 0;
+  padding: 10px 12px;
+  font:
+    14px / 1.45 ui-monospace,
+    "Cascadia Mono",
+    Consolas,
+    monospace;
+  tab-size: 4;
+}
+
+.code-src {
+  min-height: 80px;
+  resize: none;
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  background: var(--surface);
+  color: var(--text);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.code-out {
+  max-height: 320px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+
+.code-lib-panel {
+  width: 300px;
+}
+
+.code-lib-list {
+  max-height: 300px;
+  overflow-y: auto;
+}

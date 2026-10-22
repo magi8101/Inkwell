@@ -564,7 +564,13 @@ function results(q: string): HTMLElement[] {
   for (const nb of state.notebooks) {
     for (const sec of nb.sections) {
       for (const p of sec.pages) {
-        const haystack = [p.title, ...folderPath(nb, sec), nb.name, ...p.texts.map((t) => t.text)];
+        const haystack = [
+          p.title,
+          ...folderPath(nb, sec),
+          nb.name,
+          ...p.texts.map((t) => t.text),
+          ...(p.codes ?? []).map((c) => c.code),
+        ];
         if (!haystack.some((t) => t.toLowerCase().includes(needle))) continue;
         hits.push(
           h(

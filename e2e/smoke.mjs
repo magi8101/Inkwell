@@ -470,6 +470,21 @@ async function suite() {
     document.querySelector('.row.section').click(); // back to an ordinary page
     await wait(400);
   }
+  // Code block: inserting one puts it on the page; what's typed is saved with the page.
+  btn('Insert').click();
+  await wait(50);
+  [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.startsWith('Code block')).click();
+  await wait(300);
+  const src = document.querySelector('.codeblock .code-src');
+  src.value = 'print(6 * 7)';
+  src.dispatchEvent(new Event('input'));
+  src.dispatchEvent(new Event('blur'));
+  await wait(200);
+  const savedCode = (await pg()).codes ?? (await stored()).notebooks[0].sections.flatMap((x) => x.pages).find((p) => p.codes?.length)?.codes;
+  R.codeBlockSaved = !!document.querySelector('.codeblock') && savedCode?.some((c) => c.code === 'print(6 * 7)');
+  document.querySelector('[aria-label="Delete code block"]').click();
+  await wait(200);
+  R.codeBlockDeletes = !document.querySelector('.codeblock');
   // Pen calibration: run every step with synthetic pen/touch input, apply, and share the report.
   btn('Pen feel and palm settings').click();
   await wait(100);

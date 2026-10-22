@@ -59,12 +59,43 @@ export interface ImageItem {
   h: number;
   angle: number;
 }
+/** Code that runs on Compiler Explorer (godbolt.org), sitting on the page like a text box. */
+export interface CodeBlock {
+  id: string;
+  /** World-space top-left corner and width. */
+  x: number;
+  y: number;
+  w: number;
+  /** Compiler Explorer language id (e.g. 'c++', 'python') and compiler id (e.g. 'g142'). */
+  lang: string;
+  compiler: string;
+  code: string;
+  /** Libraries from Compiler Explorer's list, e.g. { id: 'fmt', version: '1100' }. */
+  libs: { id: string; version: string }[];
+  /** The last run's output, kept with the note. */
+  output: string;
+}
+/** A code block as printable text (code, then its last output), for export. */
+export const codeAsText = (c: CodeBlock): TextBox => ({
+  id: c.id,
+  x: c.x + 12,
+  y: c.y + 48,
+  w: c.w - 24,
+  text: c.output ? `${c.code.trimEnd()}\n\n${c.output}` : c.code.trimEnd(),
+  font: 'mono',
+  size: 14,
+  color: '#1c1c1e',
+  bold: false,
+  italic: false,
+});
 export interface Page {
   id: string;
   title: string;
   strokes: Stroke[];
   texts: TextBox[];
   images: ImageItem[];
+  /** Absent in notes from before code blocks existed. */
+  codes?: CodeBlock[];
   background: Background;
   /** Hex, or 'auto' to follow the theme. */
   pageColor: string;

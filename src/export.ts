@@ -2,7 +2,7 @@ import { FileDown } from 'lucide';
 import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
 import { h, icon, toast, togglePopover } from './dom';
 import { bitmap, blobOf, imageBox, loadAll } from './images';
-import { notebook, type Page, page } from './store';
+import { codeAsText, notebook, type Page, page } from './store';
 import { bbox, type FONTS, fontCss, inkColor, LINE_HEIGHT, svgPath, wrapLines } from './stroke';
 import { drawPage, isDark, pageColor } from './viewport';
 
@@ -101,7 +101,12 @@ async function download(blob: Blob, name: string): Promise<boolean> {
 
 // --- PNG: the page rendered by the same code that draws the canvas ---
 
-async function exportPng(p: Page, paper: boolean) {
+/** Code blocks print as monospace text (code and output) along with the page's text boxes. */
+const withCode = (p: Page): Page =>
+  p.codes?.length ? { ...p, texts: [...p.texts, ...p.codes.map(codeAsText)] } : p;
+
+async function exportPng(raw: Page, paper: boolean) {
+  const p = withCode(raw);
   await loadAll([p]); // pictures must be decoded before they can be drawn
   const target = paper ? { ...p, pageColor: WHITE } : p;
   const b = contentBox(p);
@@ -194,7 +199,8 @@ async function exportPdf(
       })
       .join('');
 
-  for (const [index, p] of pages.entries()) {
+  for (const [index, raw] of pages.entries()) {
+    const p = withCode(raw);
     const b = contentBox(p);
     let pageW: number;
     let pageH: number;

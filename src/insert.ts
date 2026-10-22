@@ -1,4 +1,5 @@
-import { ClipboardPaste, FileText, ImagePlus, Images, NotebookText } from 'lucide';
+import { ClipboardPaste, Code, FileText, ImagePlus, Images, NotebookText } from 'lucide';
+import { addCodeBlock } from './code';
 import { h, icon, openMenu, toast } from './dom';
 import { storePicture } from './images';
 import { insert, takeOverPaste } from './lasso';
@@ -109,6 +110,7 @@ insertButton.addEventListener('click', () =>
     { label: 'Paste picture', icon: ClipboardPaste, run: () => void pasteFromClipboard() },
     'sep',
     { label: 'PDF (to write on)…', icon: FileText, run: () => pdfInput.click() },
+    { label: 'Code block (runs on Compiler Explorer)', icon: Code, run: () => void addCodeBlock() },
     { label: 'OneNote section (.one)…', icon: NotebookText, run: () => oneInput.click() },
   ]),
 );

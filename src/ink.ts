@@ -1,7 +1,17 @@
 import { capture, h } from './dom';
 import { predict, type Sample } from './predict';
 import { densify, recognize } from './shape';
-import { inkTool, page, type Stroke, state, subscribe, type TextBox, uid, update } from './store';
+import {
+  type ImageItem,
+  inkTool,
+  page,
+  type Stroke,
+  state,
+  subscribe,
+  type TextBox,
+  uid,
+  update,
+} from './store';
 import { cut, hits, inkColor, outline, tipDiameter } from './stroke';
 import { isPalm, pageIsDark, penSeen, redraw, touchCount, toWorld, view } from './viewport';
 
@@ -103,6 +113,8 @@ let presenter: InkPresenter | null = null;
 export interface Snapshot {
   strokes: Stroke[];
   texts: TextBox[];
+  /** Omitted by edits that don't touch pictures: they stay as they are. */
+  images?: ImageItem[];
 }
 const history = new Map<string, { undo: Snapshot[]; redo: Snapshot[] }>();
 function stacks() {
@@ -118,18 +130,29 @@ export const lowLatencyCanvas = () => ctx.getContextAttributes().desynchronized 
 
 export const canUndo = () => stacks().undo.length > 0;
 export const canRedo = () => stacks().redo.length > 0;
-export const snapshot = (): Snapshot => ({ strokes: page().strokes, texts: page().texts });
+export const snapshot = (): Snapshot => ({
+  strokes: page().strokes,
+  texts: page().texts,
+  images: page().images,
+});
 
 function restore(s: Snapshot) {
   update(() => {
     page().strokes = s.strokes;
     page().texts = s.texts;
+    if (s.images) page().images = s.images;
   });
 }
 
 /** Records `before` for undo and makes `after` the page content. */
 export function commitSnapshot(before: Snapshot, after: Snapshot) {
-  if (before.strokes === after.strokes && before.texts === after.texts) return;
+  if (
+    before.strokes === after.strokes &&
+    before.texts === after.texts &&
+    (after.images === undefined || before.images === after.images)
+  ) {
+    return;
+  }
   const h = stacks();
   h.undo.push(before);
   if (h.undo.length > MAX_HISTORY) h.undo.shift();

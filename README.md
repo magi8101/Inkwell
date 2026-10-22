@@ -49,6 +49,7 @@ Modelled on Windows Ink, which draws "wet" ink on a high-priority path and "drie
 - **Ruler (R):** straight lines that snap to 15° steps (always with Shift), with a live length/angle readout.
 - **Text (T):** tap to type; tap a box to select, double-tap to edit, drag to move, drag the edge to resize; format bar for font, size, colour, bold, italic.
 - **Lasso (L):** loop around ink and text to move, resize, rotate, recolour, copy/cut/paste/duplicate or delete.
+- **Pictures:** Insert → _Picture from files…_ or _Paste picture_ (works on iPad: copy in Photos, then paste), drag one onto the page, or Ctrl/⌘+V. Pictures sit under the ink; select them with the lasso to move, resize, rotate, copy or delete — ink drawn on them moves with them.
 - **Export (Ctrl+E):** PDF (this page, chosen pages or the whole notebook; fit-to-content, A4 or Letter; vector ink and real text) or PNG.
 
 | Key         | Action                | Key                      | Action                |
@@ -61,4 +62,4 @@ Modelled on Windows Ink, which draws "wet" ink on a high-priority path and "drie
 | R           | Ruler                 | Ctrl+N                   | New page              |
 | S           | Shape auto-snap       | Ctrl+0 / Ctrl+= / Ctrl+- | Reset / zoom in / out |
 
-Not built yet: image/PDF import and file-based autosave (notes currently live in browser storage). PDF export uses the standard PDF fonts, so non-Latin text prints as "?".
+Notes are stored on the device in IndexedDB (older browser-storage notes migrate automatically). Not built yet: PDF import. PDF export uses the standard PDF fonts, so non-Latin text prints as "?".

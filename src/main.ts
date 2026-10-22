@@ -3,6 +3,7 @@ import { FileText, Grid3x3, Grip, Moon, Rows3, Square, Sun, SunMoon } from 'luci
 import { h, IS_MAC, icon, keys, toast, togglePopover } from './dom';
 import { exportButton, openExport } from './export';
 import { canRedo, canUndo, redo, undo } from './ink';
+import { insertButton } from './insert';
 import { openRadial } from './radial';
 import { addPage, search } from './sidebar';
 import {
@@ -109,7 +110,9 @@ const themeBtn = h('button', {
       s.theme = NEXT_THEME[s.theme];
     }),
 });
-document.querySelector('#corner')!.append(exportButton, tuneButton, pageBtn, themeBtn);
+document
+  .querySelector('#corner')!
+  .append(insertButton, exportButton, tuneButton, pageBtn, themeBtn);
 const syncTheme = () => {
   themeBtn.replaceChildren(icon(THEMES[state.theme]));
   themeBtn.title = `Theme: ${state.theme}`;

@@ -8,3 +8,6 @@ AGENTS.md
 .claude/
 .wrangler
 test-results
+*.one
+*.onepkg
+*.onetoc2

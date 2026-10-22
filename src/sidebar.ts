@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
+import { imagesVersion, onImageLoaded } from './images';
 import {
   newNotebook,
   newPage,
@@ -188,6 +189,8 @@ const thumbs = new Map<string, { key: unknown[]; canvas: HTMLCanvasElement }>();
 function thumb(p: Page): HTMLCanvasElement {
   const key = [
     p.strokes,
+    p.images,
+    imagesVersion, // a picture finished loading since this thumbnail was drawn
     p.background,
     p.pageColor,
     document.documentElement.dataset.theme,
@@ -442,6 +445,7 @@ function render() {
 }
 
 // The sidebar (lists and thumbnails) refreshes when idle, so it never delays the pen.
+onImageLoaded(() => update(() => {}));
 let renderPending = false;
 subscribe(() => {
   if (renderPending) return;

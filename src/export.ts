@@ -1,6 +1,7 @@
 import { FileDown } from 'lucide';
-import type { PDFFont, PDFPage } from 'pdf-lib';
+import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
 import { h, icon, toast, togglePopover } from './dom';
+import { bitmap, blobOf, imageBox, loadAll } from './images';
 import { notebook, type Page, page } from './store';
 import { bbox, type FONTS, fontCss, inkColor, LINE_HEIGHT, svgPath, wrapLines } from './stroke';
 import { drawPage, isDark, pageColor } from './viewport';
@@ -39,6 +40,13 @@ idle(() => {
 /** World-space box around everything on the page; a default canvas if it's empty. */
 function contentBox(p: Page) {
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const im of p.images) {
+    const k = imageBox(im);
+    x0 = Math.min(x0, k[0]);
+    y0 = Math.min(y0, k[1]);
+    x1 = Math.max(x1, k[2]);
+    y1 = Math.max(y1, k[3]);
+  }
   for (const s of p.strokes) {
     const b = bbox(s);
     x0 = Math.min(x0, b[0]);
@@ -94,6 +102,7 @@ async function download(blob: Blob, name: string): Promise<boolean> {
 // --- PNG: the page rendered by the same code that draws the canvas ---
 
 async function exportPng(p: Page, paper: boolean) {
+  await loadAll([p]); // pictures must be decoded before they can be drawn
   const target = paper ? { ...p, pageColor: WHITE } : p;
   const b = contentBox(p);
   const c = document.createElement('canvas');
@@ -113,7 +122,37 @@ async function exportPng(p: Page, paper: boolean) {
 // --- PDF: vector strokes via SVG paths, text with the standard PDF fonts ---
 
 async function exportPdf(pages: Page[], size: Size, paper: boolean, name: string) {
-  const { PDFDocument, StandardFonts, rgb } = await loadPdfLib();
+  const { PDFDocument, StandardFonts, rgb, degrees } = await loadPdfLib();
+  await loadAll(pages);
+  const embeddedPictures = new Map<string, PDFImage | null>();
+  /** PNG and JPEG embed as-is; other formats (WebP, GIF, HEIC...) are converted to PNG first. */
+  const embedPicture = async (id: string) => {
+    if (embeddedPictures.has(id)) return embeddedPictures.get(id)!;
+    let result: PDFImage | null = null;
+    const blob = await blobOf(id);
+    if (blob) {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      try {
+        if (blob.type === 'image/png') result = await doc.embedPng(bytes);
+        else if (blob.type === 'image/jpeg') result = await doc.embedJpg(bytes);
+      } catch {
+        result = null;
+      }
+      if (!result) {
+        const d = bitmap(id);
+        if (d) {
+          const c = document.createElement('canvas');
+          c.width = 'naturalWidth' in d ? d.naturalWidth : d.width;
+          c.height = 'naturalHeight' in d ? d.naturalHeight : d.height;
+          c.getContext('2d')!.drawImage(d, 0, 0);
+          const png = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
+          if (png) result = await doc.embedPng(new Uint8Array(await png.arrayBuffer()));
+        }
+      }
+    }
+    embeddedPictures.set(id, result);
+    return result;
+  };
   const doc = await PDFDocument.create();
   doc.setTitle(name);
   doc.setCreator('Inkwell');
@@ -172,6 +211,26 @@ async function exportPdf(pages: Page[], size: Size, paper: boolean, name: string
     if (color !== WHITE)
       pg.drawRectangle({ x: 0, y: 0, width: pageW, height: pageH, color: toRgb(color) });
     drawPattern(pg, p, b, scale, ox, oy, pageW, pageH, dark, rgb);
+    // Pictures go under the ink, embedded at their original quality.
+    for (const im of p.images) {
+      const embedded = await embedPicture(im.blob);
+      if (!embedded) continue;
+      const w = im.w * scale;
+      const h = im.h * scale;
+      // pdf-lib rotates about the image's bottom-left corner; find where that corner lands.
+      // World y points down, so the corner is at (-w/2, +h/2) from the centre before rotating.
+      const cos = Math.cos(im.angle);
+      const sin = Math.sin(im.angle);
+      const blx = im.cx + cos * (-im.w / 2) - sin * (im.h / 2);
+      const bly = im.cy + sin * (-im.w / 2) + cos * (im.h / 2);
+      pg.drawImage(embedded, {
+        x: ox + (blx - b.x) * scale,
+        y: pageH - (oy + (bly - b.y) * scale),
+        width: w,
+        height: h,
+        rotate: degrees((-im.angle * 180) / Math.PI),
+      });
+    }
     // PDF y grows upward; SVG paths are drawn downward from (x, y), so anchor at the top-left.
     const ordered = [
       ...p.strokes.filter((s) => s.tool === 'highlighter'),

@@ -176,6 +176,41 @@ async function suite() {
   R.floodMsPerSample = +((performance.now() - t0) / 240).toFixed(3);
   ev('pointerup', 780, 760);
   R.floodCheap = R.floodMsPerSample < 0.5;
+  // Pictures: drop a PNG onto the page; it is stored, arrives selected, moves with the lasso.
+  const pngCanvas = document.createElement('canvas');
+  pngCanvas.width = 400;
+  pngCanvas.height = 200;
+  const pctx = pngCanvas.getContext('2d');
+  pctx.fillStyle = '#e5484d';
+  pctx.fillRect(0, 0, 400, 200);
+  const png = await new Promise((r) => pngCanvas.toBlob(r, 'image/png'));
+  const dt = new DataTransfer();
+  dt.items.add(new File([png], 'test.png', { type: 'image/png' }));
+  document.querySelector('#stage').dispatchEvent(
+    new DragEvent('drop', { clientX: 700, clientY: 450, dataTransfer: dt, bubbles: true, cancelable: true }),
+  );
+  await wait(800);
+  const imgs = (await pg()).images;
+  R.pictureInserted = imgs.length === 1 && Math.round(imgs[0].w) === 400;
+  R.pictureSelected = !document.querySelector('.sel-frame').hidden;
+  const blobCount = await new Promise((resolve) => {
+    const req = indexedDB.open('inkwell');
+    req.onsuccess = () => {
+      const c = req.result.transaction('blobs').objectStore('blobs').count();
+      c.onsuccess = () => resolve(c.result);
+    };
+  });
+  R.pictureFileStored = blobCount === 1;
+  const pf = document.querySelector('.sel-frame').getBoundingClientRect();
+  const cx0 = imgs[0].cx;
+  F(document.querySelector('.sel-frame'), 'pointerdown', pf.left + 30, pf.top + 30);
+  F(document.querySelector('.sel-frame'), 'pointermove', pf.left + 90, pf.top + 30);
+  F(document.querySelector('.sel-frame'), 'pointerup', pf.left + 90, pf.top + 30);
+  const zoomNow = Number.parseInt(document.querySelector('#zoom').textContent, 10) / 100;
+  R.pictureMovesWithLasso = Math.abs((await pg()).images[0].cx - cx0 - 60 / zoomNow) < 1;
+  btn('Undo').click();
+  R.pictureUndoMove = Math.round((await pg()).images[0].cx - cx0) === 0;
+  btn('Pen').click();
   let blob = null;
   const realClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function () {
@@ -188,6 +223,7 @@ async function suite() {
   HTMLAnchorElement.prototype.click = realClick;
   const b = blob && (await (await fetch(blob)).blob());
   R.pdfExport = !!b && b.type === 'application/pdf';
+  R.pdfIncludesPicture = !!b && b.size > 2000; // the embedded PNG makes it clearly larger
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   btn('New page (Ctrl+N)')?.click() ?? btn('New page (⌘N)')?.click();
   await wait(1500);

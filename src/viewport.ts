@@ -1,5 +1,6 @@
 import { Locate, Maximize, Scan, ZoomIn, ZoomOut } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
+import { drawImages, imageBox, onImageLoaded } from './images';
 import { type Background, type Page, page, state, subscribe } from './store';
 import { bbox as bboxOf, drawStroke, drawTextBox, setRenderTuning } from './stroke';
 
@@ -74,6 +75,7 @@ export function drawPage(
   c.save();
   c.setTransform(v.scale, 0, 0, v.scale, v.x, v.y);
   const dark = isDark(color);
+  drawImages(c, p.images); // pictures sit under all ink, like printouts on paper
   // Highlighter sits under pen ink, like a real highlighter on paper.
   for (const s of p.strokes) if (s.tool === 'highlighter') drawStroke(c, s, dark);
   for (const s of p.strokes) if (s.tool !== 'highlighter') drawStroke(c, s, dark);
@@ -159,11 +161,14 @@ function animateTo(target: { x: number; y: number; scale: number }, ms = 320) {
   anim = requestAnimationFrame(step);
 }
 
-const boxCache = new WeakMap<Page['strokes'], { texts: Page['texts']; box: number[] | null }>();
+const boxCache = new WeakMap<
+  Page['strokes'],
+  { texts: Page['texts']; images: Page['images']; box: number[] | null }
+>();
 /** World-space box around the page's ink and text, or null for an empty page. */
 function contentBox(p: Page): number[] | null {
   const hit = boxCache.get(p.strokes);
-  if (hit && hit.texts === p.texts) return hit.box;
+  if (hit && hit.texts === p.texts && hit.images === p.images) return hit.box;
   let b: number[] | null = null;
   const grow = (x0: number, y0: number, x1: number, y1: number) => {
     b = b
@@ -174,10 +179,14 @@ function contentBox(p: Page): number[] | null {
     const k = bboxOf(s);
     grow(k[0], k[1], k[2], k[3]);
   }
+  for (const im of p.images) {
+    const k = imageBox(im);
+    grow(k[0], k[1], k[2], k[3]);
+  }
   // Text height is approximate (explicit lines only); good enough to frame it.
   for (const t of p.texts)
     grow(t.x, t.y, t.x + t.w, t.y + t.text.split('\n').length * t.size * 1.3);
-  boxCache.set(p.strokes, { texts: p.texts, box: b });
+  boxCache.set(p.strokes, { texts: p.texts, images: p.images, box: b });
   return b;
 }
 
@@ -459,6 +468,8 @@ zoomChip.addEventListener('click', () =>
 );
 
 let shownPage = '';
+onImageLoaded(() => redraw());
+
 subscribe(() => {
   setRenderTuning(state.tuning.thinning, state.tuning.pressureGamma);
   if (page().id !== shownPage) {

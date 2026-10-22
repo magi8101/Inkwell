@@ -46,11 +46,23 @@ export interface TextBox {
   bold: boolean;
   italic: boolean;
 }
+/** A picture on the page. Its file lives in IndexedDB ('blobs') under `blob`. */
+export interface ImageItem {
+  id: string;
+  blob: string;
+  /** World-space centre, size and rotation (radians), so lasso transforms stay simple. */
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  angle: number;
+}
 export interface Page {
   id: string;
   title: string;
   strokes: Stroke[];
   texts: TextBox[];
+  images: ImageItem[];
   background: Background;
   /** Hex, or 'auto' to follow the theme. */
   pageColor: string;
@@ -159,6 +171,7 @@ export const newPage = (title = 'Untitled page'): Page => ({
   title,
   strokes: [],
   texts: [],
+  images: [],
   background: 'blank',
   pageColor: 'auto',
 });
@@ -383,6 +396,7 @@ function fixSelection(s: State) {
       for (const p of x.pages) {
         p.strokes ??= [];
         p.texts ??= [];
+        p.images ??= [];
       }
   const nb = s.notebooks.find((n) => n.id === s.notebookId) ?? s.notebooks[0]!;
   s.notebookId = nb.id;

@@ -1,7 +1,18 @@
 import { ClipboardPaste, Copy, CopyPlus, RotateCw, Scissors, Trash2, X } from 'lucide';
 import { capture, clamp, h, icon, toast } from './dom';
+import { imageBox } from './images';
 import { commitSnapshot, type Snapshot, snapshot } from './ink';
-import { PALETTE, page, type Stroke, state, subscribe, type TextBox, uid, update } from './store';
+import {
+  type ImageItem,
+  PALETTE,
+  page,
+  type Stroke,
+  state,
+  subscribe,
+  type TextBox,
+  uid,
+  update,
+} from './store';
 import { bbox, LINE_HEIGHT } from './stroke';
 import { renderTexts } from './text';
 import { colorName, shown } from './toolbar';
@@ -22,13 +33,22 @@ const stage = document.querySelector<HTMLElement>('#stage')!;
 const bg = document.querySelector<HTMLCanvasElement>('#bg')!;
 const textLayer = document.querySelector<HTMLDivElement>('#texts')!;
 
-let selected = { strokes: new Set<string>(), texts: new Set<string>() };
-let clipboard: { strokes: Stroke[]; texts: TextBox[] } | null = null;
+/** Everything a selection, the clipboard or a paste can hold. */
+interface Items {
+  strokes: Stroke[];
+  texts: TextBox[];
+  images: ImageItem[];
+}
+let selected = { strokes: new Set<string>(), texts: new Set<string>(), images: new Set<string>() };
+let clipboard: Items | null = null;
 let pasteCount = 0;
 
-const hasSelection = () => selected.strokes.size + selected.texts.size > 0;
-const pickedStrokes = () => page().strokes.filter((s) => selected.strokes.has(s.id));
-const pickedTexts = () => page().texts.filter((t) => selected.texts.has(t.id));
+const hasSelection = () => selected.strokes.size + selected.texts.size + selected.images.size > 0;
+const picked = (): Items => ({
+  strokes: page().strokes.filter((s) => selected.strokes.has(s.id)),
+  texts: page().texts.filter((t) => selected.texts.has(t.id)),
+  images: page().images.filter((i) => selected.images.has(i.id)),
+});
 
 function inside(p: Pt, poly: Pt[]) {
   let hit = false;
@@ -47,8 +67,15 @@ function textHeight(t: TextBox) {
   return el ? el.offsetHeight : t.size * LINE_HEIGHT;
 }
 
-function worldBox(strokes: Stroke[], texts: TextBox[]) {
+function worldBox({ strokes, texts, images }: Items) {
   const b = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const im of images) {
+    const k = imageBox(im);
+    b[0] = Math.min(b[0]!, k[0]);
+    b[1] = Math.min(b[1]!, k[1]);
+    b[2] = Math.max(b[2]!, k[2]);
+    b[3] = Math.max(b[3]!, k[3]);
+  }
   for (const s of strokes) {
     const k = bbox(s);
     b[0] = Math.min(b[0]!, k[0]);
@@ -100,6 +127,13 @@ function transformed(base: Snapshot, m: Matrix, scale: number): Snapshot {
       const p = apply(m, t.x, t.y);
       return { ...t, x: p.x, y: p.y, w: t.w * scale, size: t.size * scale };
     }),
+    // Pictures move, scale and rotate with the ink drawn on them, so annotations stay aligned.
+    images: (base.images ?? page().images).map((im) => {
+      if (!selected.images.has(im.id)) return im;
+      const c = apply(m, im.cx, im.cy);
+      const turn = Math.atan2(m.b, m.a);
+      return { ...im, cx: c.x, cy: c.y, w: im.w * scale, h: im.h * scale, angle: im.angle + turn };
+    }),
   };
 }
 
@@ -137,7 +171,7 @@ function placeFrame() {
     bar.hidden = true;
     return;
   }
-  const b = worldBox(pickedStrokes(), pickedTexts());
+  const b = worldBox(picked());
   const pad = 8;
   frame.style.left = `${b.x * view.scale + view.x - pad}px`;
   frame.style.top = `${b.y * view.scale + view.y - pad}px`;
@@ -200,8 +234,12 @@ function updatePasteChip() {
   pasteChip.hidden = !clipboard || state.tool !== 'lasso' || hasSelection();
 }
 
-function select(strokes: Iterable<string>, texts: Iterable<string>) {
-  selected = { strokes: new Set(strokes), texts: new Set(texts) };
+export function select(
+  strokes: Iterable<string>,
+  texts: Iterable<string>,
+  images: Iterable<string> = [],
+) {
+  selected = { strokes: new Set(strokes), texts: new Set(texts), images: new Set(images) };
   renderBar();
   placeFrame();
   updatePasteChip();
@@ -212,7 +250,7 @@ const clear = () => select([], []);
 
 function copy() {
   if (!hasSelection()) return;
-  clipboard = { strokes: pickedStrokes(), texts: pickedTexts() };
+  clipboard = picked();
   pasteCount = 0;
   toast('Copied — tap Paste to place it.', 1800);
   updatePasteChip();
@@ -224,6 +262,7 @@ function remove() {
   commitSnapshot(before, {
     strokes: before.strokes.filter((s) => !selected.strokes.has(s.id)),
     texts: before.texts.filter((t) => !selected.texts.has(t.id)),
+    images: page().images.filter((i) => !selected.images.has(i.id)),
   });
   clear();
 }
@@ -233,16 +272,19 @@ function cut() {
   remove();
 }
 
-function insert(items: { strokes: Stroke[]; texts: TextBox[] }, dx: number, dy = dx) {
+export function insert(items: Items, dx: number, dy = dx) {
   const strokes = items.strokes.map((s) => {
     const points = s.points.map((v, i) => (i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v));
     return { ...s, id: uid(), points };
   });
   const texts = items.texts.map((t) => ({ ...t, id: uid(), x: t.x + dx, y: t.y + dy }));
+  // Copies share the stored picture file; only the placement is new.
+  const images = items.images.map((im) => ({ ...im, id: uid(), cx: im.cx + dx, cy: im.cy + dy }));
   const before = snapshot();
   commitSnapshot(before, {
     strokes: [...before.strokes, ...strokes],
     texts: [...before.texts, ...texts],
+    images: [...page().images, ...images],
   });
   if (state.tool !== 'lasso') {
     update((s) => {
@@ -252,13 +294,20 @@ function insert(items: { strokes: Stroke[]; texts: TextBox[] }, dx: number, dy =
   select(
     strokes.map((s) => s.id),
     texts.map((t) => t.id),
+    images.map((i) => i.id),
   );
 }
+
+let pendingPaste = false;
+/** A system-clipboard picture is being pasted: skip the pending paste of copied ink. */
+export const takeOverPaste = () => {
+  pendingPaste = false;
+};
 
 /** Pastes into the middle of what's on screen (the original may be off-screen or on another page). */
 function paste() {
   if (!clipboard) return;
-  const b = worldBox(clipboard.strokes, clipboard.texts);
+  const b = worldBox(clipboard);
   const r = bg.getBoundingClientRect();
   const c = toWorld(r.left + r.width / 2, r.top + r.height / 2);
   const step = PASTE_OFFSET * pasteCount++; // repeated pastes fan out instead of stacking
@@ -266,7 +315,7 @@ function paste() {
 }
 
 function duplicate() {
-  if (hasSelection()) insert({ strokes: pickedStrokes(), texts: pickedTexts() }, PASTE_OFFSET);
+  if (hasSelection()) insert(picked(), PASTE_OFFSET);
 }
 
 function recolor(color: string) {
@@ -300,6 +349,7 @@ function drag(
     // Preview without update(): no autosave or sidebar work on every pointer move.
     page().strokes = last.strokes;
     page().texts = last.texts;
+    if (last.images) page().images = last.images;
     redraw();
     renderTexts();
     placeFrame();
@@ -311,6 +361,7 @@ function drag(
     if (!last) return;
     page().strokes = base.strokes;
     page().texts = base.texts;
+    if (base.images) page().images = base.images;
     commitSnapshot(base, last);
     placeFrame();
   };
@@ -331,7 +382,7 @@ frame.addEventListener('pointerdown', (e) => {
 for (const handle of scaleHandles) {
   handle.addEventListener('pointerdown', (e) => {
     if (!allowed(e)) return;
-    const b = worldBox(pickedStrokes(), pickedTexts());
+    const b = worldBox(picked());
     const c = handle.dataset.corner!;
     const pivot = { x: c.includes('w') ? b.x + b.w : b.x, y: c.includes('n') ? b.y + b.h : b.y };
     // Ratio against where the drag started, so grabbing the handle never makes the selection jump.
@@ -347,7 +398,7 @@ for (const handle of scaleHandles) {
 
 rotateHandle.addEventListener('pointerdown', (e) => {
   if (!allowed(e)) return;
-  const b = worldBox(pickedStrokes(), pickedTexts());
+  const b = worldBox(picked());
   const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
   const s0 = toWorld(e.clientX, e.clientY);
   const a0 = Math.atan2(s0.y - c.y, s0.x - c.x);
@@ -396,9 +447,12 @@ bg.addEventListener('pointerdown', (e) => {
     const texts = page().texts.filter((t) =>
       inside({ x: t.x + t.w / 2, y: t.y + textHeight(t) / 2 }, loop),
     );
+    // A picture is selected when the loop goes around its centre.
+    const images = page().images.filter((im) => inside({ x: im.cx, y: im.cy }, loop));
     select(
       strokes.map((s) => s.id),
       texts.map((t) => t.id),
+      images.map((i) => i.id),
     );
   };
   bg.addEventListener('pointermove', move);
@@ -416,8 +470,12 @@ addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
   if (mod && key === 'v' && clipboard) {
-    e.preventDefault();
-    paste();
+    // Wait a moment for the browser's paste event: a picture on the system clipboard wins.
+    pendingPaste = true;
+    setTimeout(() => {
+      if (pendingPaste) paste();
+      pendingPaste = false;
+    }, 60);
     return;
   }
   if (!hasSelection() || state.tool !== 'lasso') return;
@@ -446,6 +504,8 @@ subscribe(() => {
   const tids = new Set(page().texts.map((t) => t.id));
   for (const id of selected.strokes) if (!ids.has(id)) selected.strokes.delete(id);
   for (const id of selected.texts) if (!tids.has(id)) selected.texts.delete(id);
+  const iids = new Set(page().images.map((i) => i.id));
+  for (const id of selected.images) if (!iids.has(id)) selected.images.delete(id);
   placeFrame();
   updatePasteChip();
 });

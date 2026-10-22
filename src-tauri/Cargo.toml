@@ -15,6 +15,10 @@ percent-encoding = "2"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 
+# Phones and tablets: saving exports to the content links Android's save dialog returns.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-fs = "2"
+
 [profile.release]
 codegen-units = 1
 lto = true

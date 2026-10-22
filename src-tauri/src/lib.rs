@@ -42,9 +42,35 @@ async fn save_export(app: tauri::AppHandle, request: Request<'_>) -> Result<bool
     else {
         return Ok(false);
     };
-    let path = path.into_path().map_err(|e| e.to_string())?;
-    std::fs::write(&path, bytes).map_err(|e| format!("could not save {}: {e}", path.display()))?;
+    write_picked(&app, path, bytes)?;
     Ok(true)
+}
+
+/// Writes to the place picked in the save dialog: a file path on desktop.
+#[cfg(desktop)]
+fn write_picked(
+    _app: &tauri::AppHandle,
+    path: tauri_plugin_dialog::FilePath,
+    bytes: &[u8],
+) -> Result<(), String> {
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| format!("could not save {}: {e}", path.display()))
+}
+
+/// Android hands back a content link, not a path, so it's written through the fs plugin.
+#[cfg(mobile)]
+fn write_picked(
+    app: &tauri::AppHandle,
+    path: tauri_plugin_dialog::FilePath,
+    bytes: &[u8],
+) -> Result<(), String> {
+    use std::io::Write;
+    use tauri_plugin_fs::{FsExt, OpenOptions};
+    let mut opts = OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    let mut file = app.fs().open(path, opts).map_err(|e| e.to_string())?;
+    file.write_all(bytes)
+        .map_err(|e| format!("could not save: {e}"))
 }
 
 // --- Notebook folder ("vault") ---
@@ -106,11 +132,22 @@ fn header_path(request: &Request<'_>) -> Result<String, String> {
 /// Picks the notebook folder with the native dialog. Returns its name, or `None` if cancelled.
 #[tauri::command]
 async fn vault_pick(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Err("folders on disk aren't available on phones and tablets yet".into())
+    }
+    #[cfg(desktop)]
+    vault_pick_desktop(&app)
+}
+
+#[cfg(desktop)]
+fn vault_pick_desktop(app: &tauri::AppHandle) -> Result<Option<String>, String> {
     let Some(dir) = app.dialog().file().blocking_pick_folder() else {
         return Ok(None);
     };
     let dir = dir.into_path().map_err(|e| e.to_string())?;
-    let file = vault_file(&app)?;
+    let file = vault_file(app)?;
     if let Some(parent) = file.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -204,8 +241,10 @@ async fn vault_remove(app: tauri::AppHandle, path: &str) -> Result<(), String> {
 /// Panics if the Tauri runtime fails to start.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_fs::init());
+    builder
         .invoke_handler(tauri::generate_handler![
             save_export,
             vault_pick,

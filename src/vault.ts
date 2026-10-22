@@ -29,7 +29,9 @@ type Picker = (o: { mode: 'readwrite'; id: string }) => Promise<DirHandle>;
 const showDirectoryPicker = (window as unknown as { showDirectoryPicker?: Picker })
   .showDirectoryPicker;
 
-export const vaultSupported = IN_DESKTOP_APP || !!showDirectoryPicker;
+// The Android app has no folder picker that gives a real path, so the option is hidden there.
+export const vaultSupported =
+  (IN_DESKTOP_APP && !/Android/.test(navigator.userAgent)) || !!showDirectoryPicker;
 
 function webBackend(root: DirHandle): Backend {
   const split = (path: string) => {

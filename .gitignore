@@ -12,3 +12,11 @@ test-results
 *.onepkg
 *.onetoc2
 onenote/target
+# downloaded installers
+*.deb
+*.rpm
+*.AppImage
+*.dmg
+*.msi
+*-setup.exe
+*.apk

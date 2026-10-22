@@ -1446,3 +1446,109 @@ button.twisty:hover {
     bottom: 6px;
   }
 }
+
+/* ---------- Live sessions ---------- */
+
+.tb-btn.live-on {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.live-panel {
+  width: 300px;
+}
+
+.live-panel .primary {
+  width: 100%;
+}
+
+.live-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 6px 6px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.live-code output {
+  font:
+    600 26px / 1 ui-monospace,
+    "Cascadia Mono",
+    Consolas,
+    monospace;
+  letter-spacing: 0.08em;
+}
+
+.live-input {
+  font-size: 18px;
+  letter-spacing: 0.08em;
+}
+
+.live-people {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.live-people li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.live-people li::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c);
+}
+
+.live-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 25;
+  pointer-events: none;
+}
+
+.live-cursor::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--c);
+}
+
+.live-cursor span {
+  position: absolute;
+  left: 9px;
+  top: 7px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--c);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px), (max-height: 500px) {
+  .pill .tb-btn {
+    width: 36px;
+  }
+
+  .pager {
+    left: 64px;
+  }
+
+  .page-no {
+    min-width: 40px;
+  }
+}

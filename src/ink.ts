@@ -133,7 +133,12 @@ export interface Snapshot {
   /** Omitted by edits that don't touch pictures: they stay as they are. */
   images?: ImageItem[];
 }
-const history = new Map<string, { undo: Snapshot[]; redo: Snapshot[] }>();
+/** One edit: the page content just before and just after it. */
+interface Step {
+  before: Snapshot;
+  after: Snapshot;
+}
+const history = new Map<string, { undo: Step[]; redo: Step[] }>();
 function stacks() {
   let h = history.get(page().id);
   if (!h) {
@@ -161,6 +166,37 @@ function restore(s: Snapshot) {
   });
 }
 
+/**
+ * Moves `cur` from `from` to `to` by changing only what that edit changed (by item id), so
+ * strokes others added meanwhile (a live session) survive an undo. With nothing else changed it's
+ * exactly `to`.
+ */
+function rebase<T extends { id: string }>(cur: T[], from: T[], to: T[]): T[] {
+  if (cur === from) return to;
+  const inFrom = new Set(from);
+  const inTo = new Set(to);
+  const gone = new Set(from.filter((x) => !inTo.has(x)).map((x) => x.id));
+  const back = new Map(to.filter((x) => !inFrom.has(x)).map((x) => [x.id, x]));
+  const out: T[] = [];
+  for (const x of cur) {
+    const replacement = back.get(x.id);
+    if (replacement) {
+      out.push(replacement); // changed in place (moved, resized…): keeps its layer
+      back.delete(x.id);
+    } else if (!gone.has(x.id)) out.push(x);
+  }
+  return [...out, ...back.values()];
+}
+
+function apply(from: Snapshot, to: Snapshot) {
+  const cur = snapshot();
+  restore({
+    strokes: rebase(cur.strokes, from.strokes, to.strokes),
+    texts: rebase(cur.texts, from.texts, to.texts),
+    images: rebase(cur.images ?? [], from.images ?? [], to.images ?? []),
+  });
+}
+
 /** Records `before` for undo and makes `after` the page content. */
 export function commitSnapshot(before: Snapshot, after: Snapshot) {
   if (
@@ -171,7 +207,11 @@ export function commitSnapshot(before: Snapshot, after: Snapshot) {
     return;
   }
   const h = stacks();
-  h.undo.push(before);
+  const images = before.images ?? page().images;
+  h.undo.push({
+    before: { ...before, images },
+    after: { ...after, images: after.images ?? images },
+  });
   if (h.undo.length > MAX_HISTORY) h.undo.shift();
   h.redo = [];
   restore(after);
@@ -182,18 +222,18 @@ const commit = (before: Stroke[], after: Stroke[]) =>
 
 export function undo() {
   const h = stacks();
-  const prev = h.undo.pop();
-  if (!prev) return;
-  h.redo.push(snapshot());
-  restore(prev);
+  const step = h.undo.pop();
+  if (!step) return;
+  h.redo.push(step);
+  apply(step.after, step.before);
 }
 
 export function redo() {
   const h = stacks();
-  const next = h.redo.pop();
-  if (!next) return;
-  h.undo.push(snapshot());
-  restore(next);
+  const step = h.redo.pop();
+  if (!step) return;
+  h.undo.push(step);
+  apply(step.before, step.after);
 }
 
 // --- Drawing ---

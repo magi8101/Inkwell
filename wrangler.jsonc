@@ -1,9 +1,17 @@
-// Cloudflare hosting for the web build: static files only, no server code.
+// Cloudflare hosting: the web build (static files) plus a small Worker for live sessions.
 {
   "name": "inkwell",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-19",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Everything except live sessions is served straight from the static files.
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "LIVE", "class_name": "LiveSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveSession"] }]
 }

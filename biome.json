@@ -3,6 +3,7 @@
   "files": {
     "includes": [
       "src/**",
+      "worker/index.ts",
       "*.ts",
       "*.json",
       "*.jsonc",

@@ -67,11 +67,15 @@ export interface Page {
   /** Hex, or 'auto' to follow the theme. */
   pageColor: string;
 }
+/** A folder of pages. Folders nest (Obsidian-style) through `parent`; the list stays flat. */
 export interface Section {
   id: string;
   name: string;
   color: string;
   pages: Page[];
+  /** Id of the folder this one sits in; absent for top-level folders. */
+  parent?: string;
+  collapsed?: boolean;
 }
 export interface Notebook {
   id: string;
@@ -392,12 +396,15 @@ function fixSelection(s: State) {
   if (!fav || otherInk) s.activeFavorite = null;
   if (!s.notebooks.length) s.notebooks.push(newNotebook('My Notebook'));
   for (const n of s.notebooks)
-    for (const x of n.sections)
+    for (const x of n.sections) {
+      // A folder whose parent is gone moves to the top level instead of vanishing from the tree.
+      if (x.parent && !n.sections.some((y) => y.id === x.parent)) delete x.parent;
       for (const p of x.pages) {
         p.strokes ??= [];
         p.texts ??= [];
         p.images ??= [];
       }
+    }
   const nb = s.notebooks.find((n) => n.id === s.notebookId) ?? s.notebooks[0]!;
   s.notebookId = nb.id;
   if (!nb.sections.length) nb.sections.push(newSection('Quick Notes'));
@@ -409,4 +416,16 @@ function fixSelection(s: State) {
 
 export const notebook = () => state.notebooks.find((n) => n.id === state.notebookId)!;
 export const section = () => notebook().sections.find((x) => x.id === state.sectionId)!;
+/** The folders directly inside `parent` (top level when undefined), in list order. */
+export const childFolders = (nb: Notebook, parent?: string) =>
+  nb.sections.filter((x) => x.parent === parent);
+/** A folder and everything nested inside it. */
+export function folderTree(nb: Notebook, root: Section): Section[] {
+  return [root, ...childFolders(nb, root.id).flatMap((c) => folderTree(nb, c))];
+}
+/** Names from the top-level folder down to this one. */
+export function folderPath(nb: Notebook, sec: Section): string[] {
+  const up = sec.parent && nb.sections.find((x) => x.id === sec.parent);
+  return up ? [...folderPath(nb, up), sec.name] : [sec.name];
+}
 export const page = () => section().pages.find((p) => p.id === state.pageId)!;

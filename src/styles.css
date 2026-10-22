@@ -1291,3 +1291,28 @@ button.primary:disabled {
   color: var(--text-2);
   line-height: 1.5;
 }
+
+/* ---------- Folder tree ---------- */
+
+.row.section {
+  gap: 6px;
+  padding-left: calc(2px + var(--depth, 0) * 16px);
+}
+
+.twisty {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: var(--text-2);
+}
+
+button.twisty:hover {
+  background: var(--hover);
+}
+
+.row.section.drop {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}

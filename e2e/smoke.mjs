@@ -247,6 +247,67 @@ async function suite() {
   R.addPenAddsOne = favs1.length === favs0.length + 1;
   R.newPenGetsColour = favs1.at(-1).color === '#e5484d';
   R.defaultPenUnchanged = favs1[0].color === favs0[0].color;
+  // Folders nest like Obsidian: a folder inside a folder, collapse it, drag a page into it,
+  // move it back to the top level, delete a folder with what's inside it.
+  const menuItem = (label) =>
+    [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.trim() === label);
+  const folders = async () => (await stored()).notebooks[0].sections;
+  const rowOf = (id) => document.querySelector(`.row.section[data-id="${id}"]`);
+  await wait(300);
+  const top = (await folders())[0];
+  rowOf(top.id).querySelector('.more').click();
+  await wait(50);
+  menuItem('New folder inside').click();
+  await wait(400);
+  let fs = await folders();
+  const sub = fs.find((x) => x.parent === top.id);
+  R.folderNests = !!sub && getComputedStyle(rowOf(sub.id)).getPropertyValue('--depth').trim() === '1';
+  rowOf(top.id).querySelector('button.twisty').click();
+  await wait(400);
+  R.folderCollapses = !rowOf(sub.id);
+  rowOf(top.id).querySelector('button.twisty').click();
+  await wait(400);
+  // Back in the top folder, drag its first page onto the sub-folder.
+  rowOf(top.id).click();
+  await wait(400);
+  const movedId = (await folders())[0].pages[0].id;
+  const li = document.querySelector(`.row.page[data-id="${movedId}"]`);
+  const lr = li.getBoundingClientRect();
+  const sr = rowOf(sub.id).getBoundingClientRect();
+  const pe = (type, x, y) =>
+    li.dispatchEvent(new PointerEvent(type, { pointerId: 77, clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true }));
+  pe('pointerdown', lr.left + 20, lr.top + 10);
+  pe('pointermove', sr.left + 60, lr.top + 30);
+  pe('pointermove', sr.left + 60, sr.top + sr.height / 2);
+  pe('pointerup', sr.left + 60, sr.top + sr.height / 2);
+  await wait(400);
+  fs = await folders();
+  R.pageDragsIntoFolder = fs.find((x) => x.id === sub.id).pages.some((p) => p.id === movedId);
+  rowOf(sub.id).querySelector('.more').click();
+  await wait(50);
+  menuItem('Move to…').click();
+  await wait(50);
+  menuItem('Top level').click();
+  await wait(400);
+  R.folderMovesToTop = !(await folders()).find((x) => x.id === sub.id).parent;
+  // Nest it again and delete the parent: both go, the notebook keeps at least one folder.
+  rowOf(sub.id).querySelector('.more').click();
+  await wait(50);
+  menuItem('Move to…').click();
+  await wait(50);
+  [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.trim() === top.name).click();
+  await wait(400);
+  const extra = document.querySelector('[aria-label="New folder"]');
+  extra.click();
+  await wait(400);
+  rowOf(top.id).querySelector('.more').click();
+  await wait(50);
+  const del = menuItem('Delete folder and its folders');
+  del.click();
+  del.click();
+  await wait(400);
+  fs = await folders();
+  R.folderDeleteTakesSubfolders = fs.length === 1 && !fs.some((x) => x.id === top.id || x.id === sub.id);
   // Pen calibration: run every step with synthetic pen/touch input, apply, and share the report.
   btn('Pen feel and palm settings').click();
   await wait(100);

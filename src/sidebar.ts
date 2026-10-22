@@ -3,8 +3,12 @@ import {
   BookPlus,
   Check,
   ChevronDown,
+  ChevronRight,
   Copy,
   Ellipsis,
+  Folder,
+  FolderInput,
+  FolderPlus,
   PanelLeft,
   PanelLeftClose,
   Pencil,
@@ -15,6 +19,10 @@ import {
 import { capture, h, icon, openMenu } from './dom';
 import { imagesVersion, onImageLoaded } from './images';
 import {
+  childFolders,
+  folderPath,
+  folderTree,
+  type Notebook,
   newNotebook,
   newPage,
   newSection,
@@ -240,42 +248,103 @@ const more = (label: string, onclick: (e: Event) => void) =>
     icon(Ellipsis, 18),
   );
 
-function sectionRow(sec: Section, i: number): HTMLElement {
+const select = (sec: Section) =>
+  update((s) => {
+    s.sectionId = sec.id;
+  });
+
+/** Menu of folders to move into (never into itself or a folder inside it). */
+function moveMenu(
+  anchor: Element,
+  nb: Notebook,
+  moving: Section | null,
+  run: (to: Section | null) => void,
+) {
+  const blocked = new Set(moving ? folderTree(nb, moving).map((x) => x.id) : []);
+  const targets = nb.sections.filter((x) => !blocked.has(x.id));
+  openMenu(anchor, [
+    ...(moving?.parent ? [{ label: 'Top level', icon: Book, run: () => run(null) }] : []),
+    ...targets.map((x) => ({
+      label: folderPath(nb, x).join(' › '),
+      icon: Folder,
+      checked: moving ? x.id === moving.parent : x.id === state.sectionId,
+      run: () => run(x),
+    })),
+  ]);
+}
+
+function folderRow(sec: Section, depth: number): HTMLElement {
   const nb = notebook();
-  const row = h(
+  const kids = childFolders(nb, sec.id);
+  const toggle = h(
+    'button',
+    {
+      class: 'twisty',
+      'aria-label': sec.collapsed ? 'Expand folder' : 'Collapse folder',
+      'aria-expanded': String(!sec.collapsed),
+      onclick: (e: Event) => {
+        e.stopPropagation();
+        update(() => {
+          sec.collapsed = !sec.collapsed;
+        });
+      },
+      onpointerdown: (e: Event) => e.stopPropagation(),
+    },
+    icon(sec.collapsed ? ChevronRight : ChevronDown, 16),
+  );
+  return h(
     'div',
     {
       class: 'row section',
       'data-id': sec.id,
       role: 'button',
       tabIndex: 0,
+      style: `--depth:${depth}`,
       'aria-current': sec.id === state.sectionId ? 'true' : null,
-      onclick: () =>
-        doubleTap(sec.id)
-          ? renameSection(sec)
-          : update((s) => {
-              s.sectionId = sec.id;
-            }),
-      onkeydown: (e: KeyboardEvent) =>
-        e.key === 'Enter' &&
-        update((s) => {
-          s.sectionId = sec.id;
-        }),
+      onclick: () => (doubleTap(sec.id) ? renameSection(sec) : select(sec)),
+      onkeydown: (e: KeyboardEvent) => e.key === 'Enter' && select(sec),
     },
+    kids.length ? toggle : h('span', { class: 'twisty' }),
     h('span', { class: 'dot', style: `--c:${sec.color}` }),
     h('span', { class: 'name' }, sec.name),
-    more('Section options', (e) =>
+    more('Folder options', (e) =>
       openMenu(e.currentTarget as Element, [
         { label: 'Rename', icon: Pencil, run: () => renameSection(sec) },
-        ...(nb.sections.length > 1
+        {
+          label: 'New folder inside',
+          icon: FolderPlus,
+          run: () =>
+            update((s) => {
+              const sub = { ...newSection('New folder', nb.sections.length), parent: sec.id };
+              nb.sections.push(sub);
+              sec.collapsed = false;
+              s.sectionId = sub.id;
+            }),
+        },
+        {
+          label: 'Move to…',
+          icon: FolderInput,
+          run: () =>
+            moveMenu(row(sec.id) ?? aside, nb, sec, (to) =>
+              update(() => {
+                if (to) {
+                  sec.parent = to.id;
+                  to.collapsed = false;
+                } else delete sec.parent;
+              }),
+            ),
+        },
+        // A folder takes everything inside it with it; the last folder can't go.
+        ...(nb.sections.length > folderTree(nb, sec).length
           ? [
               {
-                label: 'Delete section',
+                label: kids.length ? 'Delete folder and its folders' : 'Delete folder',
                 icon: Trash2,
                 danger: true,
                 run: () =>
                   update(() => {
-                    nb.sections.splice(i, 1);
+                    const gone = new Set(folderTree(nb, sec).map((x) => x.id));
+                    nb.sections = nb.sections.filter((x) => !gone.has(x.id));
                   }),
               },
             ]
@@ -283,7 +352,28 @@ function sectionRow(sec: Section, i: number): HTMLElement {
       ]),
     ),
   );
-  return row;
+}
+
+const row = (id: string) => list.querySelector<HTMLElement>(`[data-id="${id}"]`);
+
+/** The folder tree: each folder, then (unless collapsed) the folders inside it. */
+function tree(nb: Notebook, parent?: string, depth = 0): HTMLElement[] {
+  return childFolders(nb, parent).flatMap((sec) => [
+    folderRow(sec, depth),
+    ...(sec.collapsed ? [] : tree(nb, sec.id, depth + 1)),
+  ]);
+}
+
+/** Moves a page to the end of another folder and follows it there. */
+function movePage(p: Page, to: Section) {
+  update((s) => {
+    const from = notebook().sections.find((x) => x.pages.includes(p));
+    if (!from || from === to) return;
+    from.pages.splice(from.pages.indexOf(p), 1);
+    to.pages.push(p);
+    s.sectionId = to.id;
+    s.pageId = p.id;
+  });
 }
 
 function pageRow(p: Page, i: number, ol: HTMLElement): HTMLElement {
@@ -317,6 +407,11 @@ function pageRow(p: Page, i: number, ol: HTMLElement): HTMLElement {
             }),
         },
         {
+          label: 'Move to folder…',
+          icon: FolderInput,
+          run: () => moveMenu(li, notebook(), null, (to) => to && movePage(p, to)),
+        },
+        {
           label: 'Delete page',
           icon: Trash2,
           danger: true,
@@ -337,8 +432,17 @@ function pageRow(p: Page, i: number, ol: HTMLElement): HTMLElement {
     let dragging = false;
     let slot = i;
     capture(li, e.pointerId);
+    let into: HTMLElement | null = null; // folder row under the dragged page
     const move = (m: PointerEvent) => {
       if (!dragging && Math.abs(m.clientY - startY) < 6) return;
+      li.style.pointerEvents = 'none';
+      const over = document
+        .elementFromPoint(m.clientX, m.clientY)
+        ?.closest<HTMLElement>('.row.section');
+      li.style.pointerEvents = '';
+      into?.classList.remove('drop');
+      into = over && over.dataset.id !== sec.id ? over : null;
+      into?.classList.add('drop');
       dragging = true;
       li.classList.add('dragging');
       li.style.transform = `translateY(${m.clientY - startY}px)`;
@@ -360,6 +464,14 @@ function pageRow(p: Page, i: number, ol: HTMLElement): HTMLElement {
           });
         return;
       }
+      li.style.transform = '';
+      li.classList.remove('dragging');
+      const target = into && notebook().sections.find((x) => x.id === into!.dataset.id);
+      into?.classList.remove('drop');
+      if (target) {
+        movePage(p, target);
+        return;
+      }
       update(() => {
         sec.pages.splice(i, 1);
         sec.pages.splice(slot, 0, p);
@@ -378,7 +490,7 @@ function results(q: string): HTMLElement[] {
   for (const nb of state.notebooks) {
     for (const sec of nb.sections) {
       for (const p of sec.pages) {
-        const haystack = [p.title, sec.name, nb.name, ...p.texts.map((t) => t.text)];
+        const haystack = [p.title, ...folderPath(nb, sec), nb.name, ...p.texts.map((t) => t.text)];
         if (!haystack.some((t) => t.toLowerCase().includes(needle))) continue;
         hits.push(
           h(
@@ -390,10 +502,16 @@ function results(q: string): HTMLElement[] {
                   s.notebookId = nb.id;
                   s.sectionId = sec.id;
                   s.pageId = p.id;
+                  // Open the folders it's in, so it shows in the tree.
+                  for (let up = nb.sections.find((x) => x.id === sec.parent); up; ) {
+                    up.collapsed = false;
+                    const parent = up.parent;
+                    up = nb.sections.find((x) => x.id === parent);
+                  }
                 }),
             },
             h('span', { class: 'name' }, p.title),
-            h('small', {}, `${nb.name} › ${sec.name}`),
+            h('small', {}, [nb.name, ...folderPath(nb, sec)].join(' › ')),
           ),
         );
       }
@@ -429,16 +547,16 @@ function render() {
   ol.append(...section().pages.map((p, i) => pageRow(p, i, ol)));
   list.replaceChildren(
     heading(
-      'Sections',
+      'Folders',
       () =>
         update((s) => {
-          const sec = newSection(`Section ${nb.sections.length + 1}`, nb.sections.length);
+          const sec = newSection(`Folder ${nb.sections.length + 1}`, nb.sections.length);
           nb.sections.push(sec);
           s.sectionId = sec.id;
         }),
-      'New section',
+      'New folder',
     ),
-    h('div', { class: 'sections' }, ...nb.sections.map(sectionRow)),
+    h('div', { class: 'sections', role: 'tree' }, ...tree(nb)),
     heading('Pages', addPage, 'New page (Ctrl+N)'),
     ol,
   );

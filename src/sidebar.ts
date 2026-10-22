@@ -55,6 +55,20 @@ import {
 import { drawPage } from './viewport';
 
 const aside = document.querySelector<HTMLElement>('#sidebar')!;
+// On phones the sidebar slides over the page (see styles.css): it starts closed, and closes after
+// a page is picked or the page is touched.
+const narrow = matchMedia('(max-width: 700px), (max-height: 500px)');
+if (narrow.matches) state.sidebarOpen = false;
+const closeIfNarrow = (s: typeof state) => {
+  if (narrow.matches) s.sidebarOpen = false;
+};
+document.querySelector('#stage')!.addEventListener(
+  'pointerdown',
+  () => {
+    if (narrow.matches && state.sidebarOpen) update(closeIfNarrow);
+  },
+  { capture: true },
+);
 const openBtn = document.querySelector<HTMLButtonElement>('#sidebar-open')!;
 
 const nbName = h('span', { class: 'nb-name' });
@@ -521,6 +535,7 @@ function pageRow(p: Page, i: number, ol: HTMLElement): HTMLElement {
         else
           update((s) => {
             s.pageId = p.id;
+            closeIfNarrow(s);
           });
         return;
       }
@@ -562,6 +577,7 @@ function results(q: string): HTMLElement[] {
                   s.notebookId = nb.id;
                   s.sectionId = sec.id;
                   s.pageId = p.id;
+                  closeIfNarrow(s);
                   // Open the folders it's in, so it shows in the tree.
                   for (let up = nb.sections.find((x) => x.id === sec.parent); up; ) {
                     up.collapsed = false;

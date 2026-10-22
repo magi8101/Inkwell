@@ -1374,3 +1374,75 @@ button.twisty:hover {
     var(--shadow),
     inset 0 -3px 0 var(--accent);
 }
+
+/* ---------- Phones and narrow windows ---------- */
+
+@media (max-width: 700px), (max-height: 500px) {
+  /* The sidebar slides over the page instead of squeezing it; it closes after picking a page. */
+  #sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(320px, 86vw);
+    box-shadow: var(--shadow);
+  }
+
+  /* One row of tools that scrolls sideways, rather than a tall column over the page. */
+  #toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    touch-action: pan-x;
+  }
+
+  #toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  #toolbar > * {
+    flex-shrink: 0;
+  }
+
+  /* Compact corner controls so they fit side by side. */
+  .pager .tb-btn {
+    display: none;
+  }
+
+  .page-no {
+    min-width: 44px;
+    padding: 0 4px;
+    line-height: 44px;
+  }
+
+  .pill:not(.pager) {
+    right: 72px;
+  }
+
+  /* The sidebar button moves to the bottom-left corner, out of the toolbar's way. */
+  .fab.corner-left {
+    top: auto;
+    bottom: 12px;
+  }
+
+  .pager {
+    left: 68px;
+  }
+
+  .pill .tb-btn {
+    width: 40px;
+  }
+
+  .chip {
+    min-width: 52px;
+    padding: 0 8px;
+  }
+}
+
+@media (max-height: 480px) {
+  .pill,
+  .chip,
+  .fab.corner-left {
+    bottom: 6px;
+  }
+}

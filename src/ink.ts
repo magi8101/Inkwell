@@ -52,8 +52,13 @@ const IS_WINDOWS =
   (navigator as Navigator & UAData).userAgentData?.platform === 'Windows' ||
   /Windows/.test(navigator.userAgent);
 const OS_TRAIL = IS_WINDOWS && 'ink' in navigator;
-const ctx = live.getContext('2d', { desynchronized: !OS_TRAIL })!;
-const tctx = tip.getContext('2d', { desynchronized: !OS_TRAIL })!;
+// Android draws desynchronized canvases straight to the screen without transparency on many
+// GPUs, so the see-through wet-ink layers covered the page in black whenever nothing was being
+// drawn. Android gets normal canvases; prediction still hides most of the delay.
+const IS_ANDROID = /Android/.test(navigator.userAgent);
+const LOW_LATENCY = !OS_TRAIL && !IS_ANDROID;
+const ctx = live.getContext('2d', { desynchronized: LOW_LATENCY })!;
+const tctx = tip.getContext('2d', { desynchronized: LOW_LATENCY })!;
 let dpr = devicePixelRatio;
 new ResizeObserver(() => {
   dpr = devicePixelRatio;

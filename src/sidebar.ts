@@ -3,6 +3,7 @@ import {
   BookPlus,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Copy,
   Ellipsis,
@@ -449,6 +450,7 @@ function pageRow(p: Page, i: number, ol: HTMLElement): HTMLElement {
           s.pageId = p.id;
         }),
     },
+    h('span', { class: 'num', 'aria-hidden': 'true' }, String(i + 1)),
     thumb(p),
     h('span', { class: 'name' }, p.title),
     more('Page options', (e) =>
@@ -620,6 +622,58 @@ function render() {
     ol,
   );
 }
+
+// Page "3 / 12" in the corner of the canvas, with previous/next.
+const pager = document.querySelector<HTMLElement>('#pager')!;
+const goPage = (step: number) =>
+  update((s) => {
+    const pages = section().pages;
+    const i = pages.findIndex((p) => p.id === s.pageId) + step;
+    if (pages[i]) s.pageId = pages[i]!.id;
+  });
+const prevBtn = h(
+  'button',
+  {
+    class: 'tb-btn',
+    'aria-label': 'Previous page',
+    title: 'Previous page (Page Up)',
+    onclick: () => goPage(-1),
+  },
+  icon(ChevronLeft, 18),
+);
+const nextBtn = h(
+  'button',
+  {
+    class: 'tb-btn',
+    'aria-label': 'Next page',
+    title: 'Next page (Page Down)',
+    onclick: () => goPage(1),
+  },
+  icon(ChevronRight, 18),
+);
+const pageNo = h('output', { class: 'page-no', 'aria-live': 'polite' });
+pager.append(prevBtn, pageNo, nextBtn);
+function renderPager() {
+  const pages = section().pages;
+  const i = pages.findIndex((p) => p.id === state.pageId);
+  pageNo.textContent = `${i + 1} / ${pages.length}`;
+  pageNo.title = `Page ${i + 1} of ${pages.length} in “${section().name}”`;
+  prevBtn.disabled = i <= 0;
+  nextBtn.disabled = i >= pages.length - 1;
+}
+addEventListener('keydown', (e) => {
+  if ((e.key !== 'PageUp' && e.key !== 'PageDown') || e.ctrlKey || e.metaKey) return;
+  if (
+    (e.target as HTMLElement).closest(
+      'input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]',
+    )
+  )
+    return;
+  e.preventDefault();
+  goPage(e.key === 'PageUp' ? -1 : 1);
+});
+subscribe(renderPager);
+renderPager();
 
 // The sidebar (lists and thumbnails) refreshes when idle, so it never delays the pen.
 onImageLoaded(() => update(() => {}));

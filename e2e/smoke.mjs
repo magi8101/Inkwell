@@ -52,6 +52,10 @@ async function suite() {
   const line = (x0, y0, x1, y1, n = 20) =>
     Array.from({ length: n + 1 }, (_, i) => [x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n]);
   const R = {};
+  // Light page: the black pen is black (a minified "#fff" page colour once made it draw white).
+  R.lightPageBlackPen =
+    document.documentElement.dataset.theme !== 'light' ||
+    document.querySelector('.fav').style.getPropertyValue('--c') === '#1c1c1e';
   btn('Pen').click();
   btn('Pen').click();
   stroke(line(400, 200, 700, 220));
@@ -274,6 +278,15 @@ async function suite() {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   btn('New page (Ctrl+N)')?.click() ?? btn('New page (⌘N)')?.click();
   await wait(1500);
+  // Page numbers: the corner shows "2 / 2", previous goes back, the page list is numbered.
+  const pageNo = () => document.querySelector('.page-no').textContent;
+  R.pagerShowsNumber = pageNo() === '2 / 2';
+  btn('Previous page').click();
+  await wait(100);
+  R.pagerPrevious = pageNo() === '1 / 2' && btn('Previous page').disabled;
+  btn('Next page').click();
+  await wait(1200);
+  R.pageListNumbered = [...document.querySelectorAll('.row.page .num')].map((n) => n.textContent).join() === '1,2';
   const search = document.querySelector('.sb-search input');
   search.value = 'regression';
   search.dispatchEvent(new Event('input'));

@@ -1339,3 +1339,30 @@ button.twisty:hover {
   color: var(--accent-text);
   font-weight: 600;
 }
+
+/* ---------- Page numbers ---------- */
+
+.pager {
+  right: auto;
+  left: 12px;
+  align-items: center;
+}
+
+.pager .tb-btn:disabled {
+  opacity: 0.35;
+}
+
+.page-no {
+  min-width: 52px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.row.page .num {
+  min-width: 18px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

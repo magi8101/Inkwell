@@ -121,7 +121,13 @@ async function exportPng(p: Page, paper: boolean) {
 
 // --- PDF: vector strokes via SVG paths, text with the standard PDF fonts ---
 
-async function exportPdf(pages: Page[], size: Size, paper: boolean, name: string) {
+async function exportPdf(
+  pages: Page[],
+  size: Size,
+  paper: boolean,
+  name: string,
+  numbers: boolean,
+) {
   const { PDFDocument, StandardFonts, rgb, degrees } = await loadPdfLib();
   await loadAll(pages);
   const embeddedPictures = new Map<string, PDFImage | null>();
@@ -188,7 +194,7 @@ async function exportPdf(pages: Page[], size: Size, paper: boolean, name: string
       })
       .join('');
 
-  for (const p of pages) {
+  for (const [index, p] of pages.entries()) {
     const b = contentBox(p);
     let pageW: number;
     let pageH: number;
@@ -251,15 +257,31 @@ async function exportPdf(pages: Page[], size: Size, paper: boolean, name: string
       const text = printable(font, t.text);
       const lh = t.size * LINE_HEIGHT;
       const lines = wrapLines({ ...t, text }, (s) => font.widthOfTextAtSize(s, t.size));
+      // A rotated box turns around its top-left corner, so each line's start turns with it.
+      const cos = Math.cos(t.angle ?? 0);
+      const sin = Math.sin(t.angle ?? 0);
       lines.forEach((line, i) => {
-        const baseline = t.y - b.y + (lh - t.size) / 2 + i * lh + t.size * 0.8;
+        const down = (lh - t.size) / 2 + i * lh + t.size * 0.8;
         pg.drawText(line, {
-          x: ox + (t.x - b.x) * scale,
-          y: pageH - (oy + baseline * scale),
+          x: ox + (t.x - sin * down - b.x) * scale,
+          y: pageH - (oy + (t.y + cos * down - b.y) * scale),
           size: t.size * scale,
           font,
           color: toRgb(inkColor(t.color, dark)),
+          rotate: degrees((-(t.angle ?? 0) * 180) / Math.PI),
         });
+      });
+    }
+    if (numbers && pages.length > 1) {
+      const label = `${index + 1} / ${pages.length}`;
+      const f = await fontFor('sans', false, false);
+      const sizePt = 9;
+      pg.drawText(label, {
+        x: (pageW - f.widthOfTextAtSize(label, sizePt)) / 2,
+        y: Math.min(18, MARGIN_PT / 2),
+        size: sizePt,
+        font: f,
+        color: dark ? rgb(0.75, 0.75, 0.78) : rgb(0.45, 0.45, 0.5),
       });
     }
   }
@@ -318,6 +340,7 @@ function panel(): HTMLElement {
   let scope: Scope = 'page';
   let size: Size = 'fit';
   let paper = true;
+  let numbers = true;
   const chosen = new Set([page().id]);
 
   const seg = <T extends string>(options: [T, string][], get: () => T, set: (v: T) => void) => {
@@ -397,6 +420,13 @@ function panel(): HTMLElement {
       paper = paperBox.checked;
     },
   });
+  const numbersBox = h('input', {
+    type: 'checkbox',
+    checked: numbers,
+    onchange: () => {
+      numbers = numbersBox.checked;
+    },
+  });
   const pdfOnly = h(
     'div',
     { class: 'export-pdf' },
@@ -405,6 +435,7 @@ function panel(): HTMLElement {
     list,
     h('div', { class: 'panel-sub' }, 'Page size'),
     sz.el,
+    h('label', { class: 'check' }, numbersBox, h('span', {}, 'Page numbers')),
   );
   const go = h('button', { class: 'primary', onclick: run }, 'Export');
 
@@ -439,6 +470,7 @@ function panel(): HTMLElement {
           size,
           paper,
           scope === 'page' ? page().title : notebook().name,
+          numbers,
         );
       }
       if (saved) toast(IN_DESKTOP_APP ? 'Saved.' : 'Exported — check your Downloads folder.', 3000);

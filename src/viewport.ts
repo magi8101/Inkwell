@@ -19,9 +19,10 @@ let dpr = devicePixelRatio;
 let queued = false;
 
 export function pageColor(c: string): string {
-  return c === 'auto'
-    ? getComputedStyle(document.documentElement).getPropertyValue('--page').trim()
-    : c;
+  if (c !== 'auto') return c;
+  // The CSS minifier shortens #ffffff to #fff; everything that reads a page colour expects 6 digits.
+  const css = getComputedStyle(document.documentElement).getPropertyValue('--page').trim();
+  return /^#[\da-f]{3}$/i.test(css) ? `#${[...css.slice(1)].map((d) => d + d).join('')}` : css;
 }
 
 export function isDark(hex: string): boolean {

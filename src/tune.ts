@@ -1,6 +1,7 @@
 import { Gauge } from 'lucide';
 import { openCalibration } from './calibrate';
-import { h, icon, togglePopover } from './dom';
+import { cursorFromFile } from './cursor';
+import { h, icon, toast, togglePopover } from './dom';
 import { inkStats, inkTrailAvailable, lowLatencyCanvas } from './ink';
 import { DEFAULT_TUNING, state, subscribe, type Tuning, update } from './store';
 
@@ -156,7 +157,7 @@ function panel(): HTMLElement {
     toggle('tapGestures', 'Two-finger tap undo, three-finger tap redo'),
   ];
   /** A labelled row of choices for one setting. */
-  const choice = <K extends 'sideButton' | 'eraserEnd'>(
+  const choice = <K extends 'sideButton' | 'eraserEnd' | 'cursor'>(
     key: K,
     title: string,
     options: readonly (readonly [Tuning[K], string])[],
@@ -201,7 +202,44 @@ function panel(): HTMLElement {
     ['eraser', 'Erase strokes'],
     ['pixelEraser', 'Pixel erase'],
   ]);
-  const all = [...rows, ...toggles, side, eraserEnd];
+  const cursorChoice = choice('cursor', 'Pen cursor over the page:', [
+    ['dot', 'Dot'],
+    ['crosshair', 'Crosshair'],
+    ['none', 'None'],
+    ['custom', 'Custom'],
+  ]);
+  // Custom: pick any picture; it becomes a 32 px cursor.
+  const cursorFile = h('input', { type: 'file', accept: 'image/*', hidden: true });
+  cursorFile.addEventListener('change', async () => {
+    const f = cursorFile.files?.[0];
+    if (!f) return;
+    try {
+      const url = await cursorFromFile(f);
+      update((st) => {
+        st.tuning.cursorImage = url;
+        st.tuning.cursor = 'custom';
+      });
+    } catch {
+      toast("Couldn't read that picture.", 2500);
+    }
+    cursorFile.value = '';
+  });
+  const pickCursor = h(
+    'button',
+    { class: 'menu-item', onclick: () => cursorFile.click() },
+    'Choose cursor picture…',
+  );
+  cursorChoice.el.append(cursorFile, pickCursor);
+  const cursorSync = cursorChoice.sync;
+  cursorChoice.sync = () => {
+    cursorSync();
+    pickCursor.hidden = state.tuning.cursor !== 'custom';
+  };
+  // Choosing Custom without a picture yet asks for one.
+  cursorChoice.el.querySelectorAll('button.seg')[3]!.addEventListener('click', () => {
+    if (!state.tuning.cursorImage) cursorFile.click();
+  });
+  const all = [...rows, ...toggles, side, eraserEnd, cursorChoice];
   const refresh = () => {
     for (const r of all) r.sync();
   };
@@ -224,6 +262,7 @@ function panel(): HTMLElement {
     ...toggles.map((t) => t.el),
     side.el,
     eraserEnd.el,
+    cursorChoice.el,
     readout,
     h(
       'button',

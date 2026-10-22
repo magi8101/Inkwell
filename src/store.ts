@@ -115,6 +115,10 @@ export interface Tuning {
   sideButton: 'eraser' | 'pixelEraser' | 'menu';
   /** The pen's back (eraser) end: removes whole strokes, or rubs out just what it touches. */
   eraserEnd: 'eraser' | 'pixelEraser';
+  /** Pointer over the page for pen and erasers. */
+  cursor: 'dot' | 'crosshair' | 'none' | 'custom';
+  /** The custom cursor: a 32 px PNG data URL. */
+  cursorImage: string;
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -131,6 +135,8 @@ export const DEFAULT_TUNING: Tuning = {
   tapGestures: true,
   sideButton: 'eraser',
   eraserEnd: 'eraser',
+  cursor: 'dot',
+  cursorImage: '',
 };
 
 export interface State {

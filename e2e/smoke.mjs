@@ -106,6 +106,24 @@ async function suite() {
   R.eraserEndStroke = (await penLines()) === 0;
   btn('Undo').click();
   R.eraserEndUndo = (await penLines()) === 1;
+  // Pen cursor: a dot the colour of the pen by default; crosshair and none on request.
+  const cursorAfterMove = () => {
+    ev('pointermove', 700, 500, { type: 'mouse', buttons: 0 });
+    return bg.style.cursor;
+  };
+  const setCursor = async (label) => {
+    btn('Pen feel and palm settings').click();
+    await wait(50);
+    const group = [...document.querySelectorAll('.tune-side')].find((g) => g.textContent.includes('Pen cursor'));
+    [...group.querySelectorAll('button')].find((b) => b.textContent === label).click();
+    btn('Pen feel and palm settings').click();
+  };
+  R.cursorDot = cursorAfterMove().includes('data:image/svg+xml');
+  await setCursor('Crosshair');
+  R.cursorCrosshair = cursorAfterMove() === 'crosshair';
+  await setCursor('None');
+  R.cursorNone = cursorAfterMove() === 'none';
+  await setCursor('Dot');
   btn('Text box').click();
   pid++;
   ev('pointerdown', 800, 450, { type: 'mouse' });

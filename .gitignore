@@ -1,0 +1,9 @@
+node_modules
+dist
+src-tauri/target
+src-tauri/gen
+# agent config stays local
+CLAUDE.md
+AGENTS.md
+.claude/
+.wrangler

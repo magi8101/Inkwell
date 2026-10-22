@@ -1,0 +1,9 @@
+// Cloudflare hosting for the web build: static files only, no server code.
+{
+  "name": "inkwell",
+  "compatibility_date": "2026-10-19",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

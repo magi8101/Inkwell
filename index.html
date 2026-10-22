@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inkwell</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <aside id="sidebar" aria-label="Notebooks"></aside>
+    <main id="stage">
+      <canvas id="bg"></canvas>
+      <canvas id="live"></canvas>
+      <div id="toolbar" role="toolbar" aria-label="Tools"></div>
+      <button type="button" id="toolbar-fab" class="fab" hidden></button>
+      <button type="button" id="sidebar-open" class="fab corner-left" aria-label="Show sidebar" title="Show sidebar (Ctrl+\)" hidden></button>
+      <div id="corner" class="pill"></div>
+      <button type="button" id="zoom" class="chip" title="Reset zoom (Ctrl+0)">100%</button>
+    </main>
+  </body>
+</html>

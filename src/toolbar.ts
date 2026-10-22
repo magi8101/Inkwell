@@ -18,6 +18,7 @@ import {
 import { capture, clamp, h, icon, toast, togglePopover } from './dom';
 import { canRedo, canUndo, redo, undo } from './ink';
 import { editStyle, inkTool, PALETTE, state, subscribe, type Tool, update } from './store';
+import 'vanilla-colorful/hex-color-picker.js';
 import { BLACK, inkColor } from './stroke';
 import { pageIsDark } from './viewport';
 
@@ -197,7 +198,19 @@ function stylePanel(): HTMLElement {
     spellcheck: false,
     'aria-label': 'Hex colour',
   });
-  const picker = h('input', { type: 'color', 'aria-label': 'Custom colour' });
+  // Custom colours: the same in-panel picker on every browser and on iPad (the native
+  // <input type=color> opens a different dialog everywhere, an old Win32 one on Windows).
+  const picker = h('hex-color-picker', { hidden: true });
+  const custom = h('button', {
+    class: 'custom-color',
+    'aria-label': 'Custom colour',
+    title: 'Custom colour',
+    'aria-expanded': 'false',
+    onclick: () => {
+      picker.hidden = !picker.hidden;
+      custom.setAttribute('aria-expanded', String(!picker.hidden));
+    },
+  });
   const widthOut = h('output');
   const opacityOut = h('output');
   const width = h('input', { type: 'range', min: 0.5, max: 40, step: 0.5, 'aria-label': 'Width' });
@@ -223,7 +236,8 @@ function stylePanel(): HTMLElement {
     if (document.activeElement !== hex) hex.value = shown(s.color);
     hex.removeAttribute('aria-invalid');
     hex.title = colorName(s.color);
-    picker.value = shown(s.color);
+    picker.color = shown(s.color);
+    custom.style.setProperty('--c', shown(s.color));
     width.value = String(s.width);
     opacity.value = String(Math.round(s.opacity * 100));
     widthOut.textContent = `${s.width}px`;
@@ -237,9 +251,7 @@ function stylePanel(): HTMLElement {
     else hex.setAttribute('aria-invalid', 'true');
   });
   hex.addEventListener('blur', refresh);
-  // 'input' fires while dragging in the picker; some browsers' pickers only send 'change'.
-  picker.addEventListener('input', () => set({ color: stored(picker.value) }));
-  picker.addEventListener('change', () => set({ color: stored(picker.value) }));
+  picker.addEventListener('color-changed', (e) => set({ color: stored(e.detail.value) }));
   width.addEventListener('input', () => set({ width: Number(width.value) }));
   opacity.addEventListener('input', () => set({ opacity: Number(opacity.value) / 100 }));
 
@@ -256,7 +268,8 @@ function stylePanel(): HTMLElement {
     ),
     preview,
     h('div', { class: 'palette' }, ...swatches),
-    h('div', { class: 'hex-row' }, picker, hex),
+    h('div', { class: 'hex-row' }, custom, hex),
+    picker,
     h('label', { class: 'slider' }, h('span', {}, 'Width'), width, widthOut),
     h('label', { class: 'slider' }, h('span', {}, 'Opacity'), opacity, opacityOut),
     removePenButton(),

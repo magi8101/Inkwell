@@ -13,7 +13,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   props: Record<string, unknown> = {},
   ...children: Child[]
 ): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
+  const el: HTMLElement = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
     if (v == null || v === false) continue;
     if (k.startsWith('on') && typeof v === 'function') {
@@ -29,7 +29,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
     }
   }
   for (const c of children) if (c) el.append(typeof c === 'string' ? keys(c) : c);
-  return el;
+  return el as HTMLElementTagNameMap[K];
 }
 
 export function icon(node: IconNode, size = 20): SVGElement {

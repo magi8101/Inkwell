@@ -405,8 +405,13 @@ for (const [name, engine, opts] of runs) {
       document.querySelector('.pal[data-color="#1c1c1e"]').click();
       await wait(50);
       const hex = document.querySelector('.hex');
-      const picker = document.querySelector('.hex-row input[type="color"]');
-      const out = { darkHexShowsWhite: hex.value === '#f4f4f5' && picker.value === '#f4f4f5' };
+      const picker = document.querySelector('hex-color-picker');
+      const out = { darkHexShowsWhite: hex.value === '#f4f4f5' && picker.color === '#f4f4f5' };
+      document.querySelector('.custom-color').click();
+      out.customPickerOpens = !picker.hidden && picker.getBoundingClientRect().height > 100;
+      picker.dispatchEvent(new CustomEvent('color-changed', { detail: { value: '#123456' } }));
+      await wait(50);
+      out.customPickerSetsColour = hex.value === '#123456';
       hex.value = '#f4f4f5';
       hex.dispatchEvent(new Event('input'));
       await wait(50);

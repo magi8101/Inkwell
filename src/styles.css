@@ -422,13 +422,25 @@ button:disabled {
   gap: 8px;
 }
 
-.hex-row input[type="color"] {
+.custom-color {
   width: 44px;
   height: 36px;
-  padding: 2px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-2);
+  background: linear-gradient(var(--c), var(--c)) center / 24px 18px no-repeat var(--surface-2);
+}
+
+.custom-color[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+hex-color-picker {
+  width: 100%;
+  height: 160px;
+}
+
+hex-color-picker[hidden] {
+  display: none;
 }
 
 .hex {

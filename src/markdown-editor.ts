@@ -6,11 +6,12 @@ import { TableKit } from '@tiptap/extension-table';
 import { Placeholder } from '@tiptap/extensions';
 import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
+import { WikiLink } from './wiki-link';
 
 export function createEditor(
   el: HTMLElement,
   md: string,
-  on: { onUpdate: () => void; onSelection: () => void },
+  on: { onUpdate: () => void; onSelection: () => void; onLink?: (name: string) => void },
   editable = true,
 ): Editor {
   el.replaceChildren();
@@ -26,6 +27,7 @@ export function createEditor(
       Placeholder.configure({
         placeholder: 'Type here — # for a heading, - for a list, [ ] for a checkbox',
       }),
+      WikiLink.configure({ onOpen: (name) => on.onLink?.(name) }),
       Markdown,
     ],
     content: md,

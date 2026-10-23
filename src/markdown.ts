@@ -16,7 +16,16 @@ import {
   Undo2,
 } from 'lucide';
 import { h, icon } from './dom';
-import { newMarkdownPage, page, section, subscribe, update } from './store';
+import {
+  childFolders,
+  newMarkdownPage,
+  notebook,
+  page,
+  type Section,
+  section,
+  subscribe,
+  update,
+} from './store';
 
 // Markdown notes: typed pages that format as you type (`# ` → heading, `**bold**` → bold, `- [ ] `
 // → checkbox…), saved as Markdown text so they open and save as .md files unchanged. The editor
@@ -179,6 +188,7 @@ async function open(id: string, md: string) {
   }
   if (shownId !== id) return; // switched again while the editor was loading
   editor = createEditor(body, md, {
+    onLink: openLink,
     onUpdate: () => {
       clearTimeout(saveTimer);
       saveTimer = window.setTimeout(save, 400);
@@ -220,6 +230,46 @@ subscribe(sync);
 sync();
 addEventListener('pagehide', save);
 document.addEventListener('visibilitychange', () => document.hidden && save());
+
+/** Opens the page a [[link]] names; with no such page yet, makes a note with that name. */
+function openLink(name: string) {
+  save(); // the typing so far is saved first
+  const want = name.trim().toLowerCase();
+  if (!want) return;
+  update((s) => {
+    for (const nb of s.notebooks)
+      for (const sec of nb.sections)
+        for (const p of sec.pages)
+          if (p.title.trim().toLowerCase() === want) {
+            s.notebookId = nb.id;
+            s.sectionId = sec.id;
+            s.pageId = p.id;
+            return;
+          }
+    const note = newMarkdownPage(name.trim());
+    section().pages.push(note);
+    s.pageId = note.id;
+  });
+}
+
+/** A note listing a folder's pages (and its folders') as links, put first in that folder. */
+export function addContentsPage(sec: Section) {
+  const link = (t: string) => `[[${t.replace(/[\]|\n]/g, ' ').trim()}]]`;
+  const list = (from: Section, depth: number): string[] => [
+    ...from.pages.map((p) => `${'  '.repeat(depth)}- ${link(p.title)}`),
+    ...childFolders(notebook(), from.id).flatMap((c) => [
+      `${'  '.repeat(depth)}- **${c.name}**`,
+      ...list(c, depth + 1),
+    ]),
+  ];
+  const md = `# ${sec.name}\n\n${list(sec, 0).join('\n')}\n`;
+  update((s) => {
+    const note = newMarkdownPage(`${sec.name} — contents`, md);
+    sec.pages.unshift(note);
+    s.sectionId = sec.id;
+    s.pageId = note.id;
+  });
+}
 
 /** Adds a Markdown note after the current page and shows it. */
 export function addMarkdownNote(title = UNTITLED, md = '') {

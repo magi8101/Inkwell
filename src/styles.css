@@ -1832,6 +1832,19 @@ button.twisty:hover {
 
 /* ---------- Markdown notes ---------- */
 
+.md-doc a.wikilink {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--pressed);
+  color: var(--accent-text);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.md-doc a.wikilink:hover {
+  text-decoration: underline;
+}
+
 #md {
   position: absolute;
   inset: 0;

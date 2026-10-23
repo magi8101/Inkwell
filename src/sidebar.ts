@@ -15,6 +15,7 @@ import {
   FolderPlus,
   FolderSync,
   FolderX,
+  ListTree,
   PanelLeft,
   PanelLeftClose,
   Pencil,
@@ -24,7 +25,7 @@ import {
 } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
 import { imageBox, imagesVersion, onImageLoaded } from './images';
-import { addMarkdownNote } from './markdown';
+import { addContentsPage, addMarkdownNote } from './markdown';
 import {
   childFolders,
   folderPath,
@@ -424,6 +425,11 @@ function folderRow(sec: Section, depth: number): HTMLElement {
     more('Folder options', (e) =>
       openMenu(e.currentTarget as Element, [
         { label: 'Rename', icon: Pencil, run: () => renameSection(sec) },
+        {
+          label: 'Make a contents page',
+          icon: ListTree,
+          run: () => addContentsPage(sec),
+        },
         {
           label: 'New folder inside',
           icon: FolderPlus,

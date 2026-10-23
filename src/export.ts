@@ -199,7 +199,42 @@ async function exportPdf(
       })
       .join('');
 
+  // A Markdown note prints as text pages (as many as it needs); it has no ink or page numbers.
+  const noteFonts = async () => {
+    const set = {
+      regular: await fontFor('sans', false, false),
+      bold: await fontFor('sans', true, false),
+      italic: await fontFor('sans', false, true),
+      boldItalic: await fontFor('sans', true, true),
+      mono: await fontFor('mono', false, false),
+    };
+    return {
+      get: (o: { bold?: boolean; italic?: boolean; mono?: boolean }) =>
+        o.mono
+          ? set.mono
+          : o.bold && o.italic
+            ? set.boldItalic
+            : o.bold
+              ? set.bold
+              : o.italic
+                ? set.italic
+                : set.regular,
+      printable,
+    };
+  };
+
   for (const [index, raw] of pages.entries()) {
+    if (raw.md !== undefined) {
+      const { drawMarkdown } = await import('./md-pdf');
+      await drawMarkdown(
+        doc,
+        raw.md,
+        await noteFonts(),
+        rgb,
+        size === 'letter' ? [612, 792] : [595.28, 841.89],
+      );
+      continue;
+    }
     const p = withCode(raw);
     const sheet = sheetOf(p);
     // A sheet of paper prints as itself, at its real size; anything beyond its edges is cut off.
@@ -353,7 +388,7 @@ function markdownPanel(p: Page): HTMLElement {
     'div',
     { class: 'style-panel export-panel' },
     h('div', { class: 'panel-title' }, 'Export'),
-    h('p', { class: 'panel-sub' }, 'A Markdown note saves as a .md file.'),
+    h('p', { class: 'panel-sub' }, 'A Markdown note saves as a .md file, or prints as PDF pages.'),
     h(
       'button',
       {
@@ -365,6 +400,21 @@ function markdownPanel(p: Page): HTMLElement {
         },
       },
       'Save as .md',
+    ),
+    h(
+      'button',
+      {
+        class: 'menu-item',
+        onclick: async () => {
+          try {
+            if (await exportPdf([p], 'a4', true, p.title, false))
+              toast(IN_DESKTOP_APP ? 'Saved.' : 'Saved — check your Downloads folder.', 3000);
+          } catch (e) {
+            toast(`Export failed: ${e instanceof Error ? e.message : e}`, 6000);
+          }
+        },
+      },
+      'Save as PDF',
     ),
   );
 }
@@ -497,10 +547,7 @@ function panel(): HTMLElement {
             : scope === 'notebook'
               ? all
               : all.filter((p) => chosen.has(p.id));
-        // ponytail: Markdown notes aren't drawn into PDFs; each one exports as .md on its own.
-        const pages = picked.filter((p) => p.md === undefined);
-        if (pages.length < picked.length)
-          toast('Markdown notes are left out of PDFs — open one and export it as .md.', 4000);
+        const pages = picked;
         if (!pages.length) {
           toast('Choose at least one page.', 2500);
           return;

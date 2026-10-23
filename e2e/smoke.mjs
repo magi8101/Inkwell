@@ -670,6 +670,31 @@ async function suite() {
   if (!R.calibrationRawInput) console.log(report.split('RAW INPUT')[1]?.split('DELAY')[0]);
   document.querySelector('.cal-close').click();
   R.calibrationCloses = !document.querySelector('.cal-overlay');
+  // A Markdown note exports as PDF pages: capture the file the export hands to the browser.
+  let pdfBlob = null;
+  const realCreate = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = (b) => {
+    if (b.type === 'application/pdf') pdfBlob = b;
+    return realCreate(b);
+  };
+  document.querySelector('[aria-label="New Markdown note"]').click();
+  await wait(2500);
+  document.querySelector('.md-doc')?.focus();
+  document.execCommand('insertText', false, 'A note that becomes a PDF');
+  await wait(700);
+  btn('Export').click();
+  await wait(200);
+  [...document.querySelectorAll('.export-panel .menu-item')].find((b) => b.textContent === 'Save as PDF')?.click();
+  for (let i = 0; i < 40 && !pdfBlob; i++) await wait(150);
+  URL.createObjectURL = realCreate;
+  R.markdownNoteExportsPdf = !!pdfBlob && pdfBlob.size > 400 && (await pdfBlob.slice(0, 5).text()) === '%PDF-';
+  // Clean up: delete the note (its menu asks twice) so later steps see an ordinary notebook.
+  document.querySelector('.row.page[aria-current="true"] [aria-label="Page options"]').click();
+  await wait(100);
+  const delNote = menuItemNow('Delete page');
+  delNote.click();
+  delNote.click();
+  await wait(300);
   R.errors = errors;
   return R;
 }

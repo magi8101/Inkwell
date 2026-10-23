@@ -1,12 +1,45 @@
-import { ClipboardPaste, Copy, CopyPlus, RotateCw, Scissors, Trash2, Type, X } from 'lucide';
-import { capture, clamp, h, icon, toast } from './dom';
+import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalDistributeCenter,
+  BringToFront,
+  ClipboardPaste,
+  Copy,
+  CopyPlus,
+  Group,
+  Layers,
+  Lock,
+  PaintBucket,
+  RotateCw,
+  Scissors,
+  SendToBack,
+  Trash2,
+  Type,
+  Ungroup,
+  X,
+} from 'lucide';
+import { capture, clamp, h, icon, openMenu, toast } from './dom';
 import { imageBox } from './images';
 import { commitSnapshot, type Snapshot, snapshot } from './ink';
 import { recognizeInk } from './ocr';
 import {
+  shapeBox,
+  centre as shapeCentre,
+  ends as shapeEnds,
+  byId as shapesById,
+  unbindGone,
+} from './shape-geom';
+import {
   type ImageItem,
+  isBox,
   PALETTE,
   page,
+  type Shape,
   type Stroke,
   state,
   subscribe,
@@ -39,16 +72,24 @@ interface Items {
   strokes: Stroke[];
   texts: TextBox[];
   images: ImageItem[];
+  shapes?: Shape[];
 }
-let selected = { strokes: new Set<string>(), texts: new Set<string>(), images: new Set<string>() };
+let selected = {
+  strokes: new Set<string>(),
+  texts: new Set<string>(),
+  images: new Set<string>(),
+  shapes: new Set<string>(),
+};
 let clipboard: Items | null = null;
 let pasteCount = 0;
 
-const hasSelection = () => selected.strokes.size + selected.texts.size + selected.images.size > 0;
+const hasSelection = () =>
+  selected.strokes.size + selected.texts.size + selected.images.size + selected.shapes.size > 0;
 const picked = (): Items => ({
   strokes: page().strokes.filter((s) => selected.strokes.has(s.id)),
   texts: page().texts.filter((t) => selected.texts.has(t.id)),
   images: page().images.filter((i) => selected.images.has(i.id)),
+  shapes: (page().shapes ?? []).filter((s) => selected.shapes.has(s.id)),
 });
 
 function inside(p: Pt, poly: Pt[]) {
@@ -68,8 +109,16 @@ function textHeight(t: TextBox) {
   return el ? el.offsetHeight : t.size * LINE_HEIGHT;
 }
 
-function worldBox({ strokes, texts, images }: Items) {
+function worldBox({ strokes, texts, images, shapes = [] }: Items) {
   const b = [Infinity, Infinity, -Infinity, -Infinity];
+  const sMap = shapesById([...(page().shapes ?? []), ...shapes]);
+  for (const s of shapes) {
+    const k = shapeBox(s, sMap);
+    b[0] = Math.min(b[0]!, k[0]);
+    b[1] = Math.min(b[1]!, k[1]);
+    b[2] = Math.max(b[2]!, k[2]);
+    b[3] = Math.max(b[3]!, k[3]);
+  }
   for (const im of images) {
     const k = imageBox(im);
     b[0] = Math.min(b[0]!, k[0]);
@@ -149,7 +198,44 @@ function transformed(base: Snapshot, m: Matrix, scale: number): Snapshot {
       const turn = Math.atan2(m.b, m.a);
       return { ...im, cx: c.x, cy: c.y, w: im.w * scale, h: im.h * scale, angle: im.angle + turn };
     }),
+    shapes: transformedShapes(base.shapes ?? page().shapes ?? [], m, scale),
   };
+}
+
+/** Shapes move, scale and turn with the selection; a selected arrow keeps its binding only to
+ *  shapes that move with it (otherwise its ends become plain points). */
+function transformedShapes(list: Shape[], m: Matrix, scale: number): Shape[] {
+  const map = shapesById(list);
+  const turn = Math.atan2(m.b, m.a);
+  return list.map((s) => {
+    if (!selected.shapes.has(s.id)) return s;
+    if (isBox(s)) {
+      const c = apply(m, s.cx, s.cy);
+      return {
+        ...s,
+        cx: c.x,
+        cy: c.y,
+        w: s.w * scale,
+        h: s.h * scale,
+        angle: s.angle + turn,
+        width: s.width * scale,
+      };
+    }
+    const { a, b } = shapeEnds(s, map);
+    const p = apply(m, a.x, a.y);
+    const q = apply(m, b.x, b.y);
+    const { bindStart, bindEnd, ...rest } = s;
+    return {
+      ...rest,
+      x1: p.x,
+      y1: p.y,
+      x2: q.x,
+      y2: q.y,
+      width: s.width * scale,
+      ...(bindStart && selected.shapes.has(bindStart) ? { bindStart } : {}),
+      ...(bindEnd && selected.shapes.has(bindEnd) ? { bindEnd } : {}),
+    };
+  });
 }
 
 // --- Overlay: lasso path, selection frame with handles, action bar ---
@@ -223,6 +309,22 @@ function renderBar() {
       ? [btn('Convert handwriting to text', Type, () => void toText())]
       : []),
     ...(clipboard ? [btn('Paste (Ctrl+V)', ClipboardPaste, paste)] : []),
+    ...(selected.shapes.size
+      ? [
+          (() => {
+            const b: HTMLElement = btn('Shape style', PaintBucket, () => openMenu(b, styleItems()));
+            return b;
+          })(),
+        ]
+      : []),
+    ...(arrangeItems().length
+      ? [
+          (() => {
+            const b: HTMLElement = btn('Arrange', Layers, () => openMenu(b, arrangeItems()));
+            return b;
+          })(),
+        ]
+      : []),
     h(
       'div',
       { class: 'colors' },
@@ -259,8 +361,14 @@ export function select(
   strokes: Iterable<string>,
   texts: Iterable<string>,
   images: Iterable<string> = [],
+  shapes: Iterable<string> = [],
 ) {
-  selected = { strokes: new Set(strokes), texts: new Set(texts), images: new Set(images) };
+  selected = {
+    strokes: new Set(strokes),
+    texts: new Set(texts),
+    images: new Set(images),
+    shapes: new Set(shapes),
+  };
   renderBar();
   placeFrame();
   updatePasteChip();
@@ -280,10 +388,14 @@ function copy() {
 function remove() {
   if (!hasSelection()) return;
   const before = snapshot();
+  const sMap = shapesById(before.shapes ?? []);
   commitSnapshot(before, {
     strokes: before.strokes.filter((s) => !selected.strokes.has(s.id)),
     texts: before.texts.filter((t) => !selected.texts.has(t.id)),
     images: page().images.filter((i) => !selected.images.has(i.id)),
+    shapes: (before.shapes ?? [])
+      .filter((s) => !selected.shapes.has(s.id))
+      .map((s) => unbindGone(s, selected.shapes, sMap)),
   });
   clear();
 }
@@ -353,11 +465,13 @@ export function insert(items: Items, dx: number, dy = dx) {
   const texts = items.texts.map((t) => ({ ...t, id: uid(), x: t.x + dx, y: t.y + dy }));
   // Copies share the stored picture file; only the placement is new.
   const images = items.images.map((im) => ({ ...im, id: uid(), cx: im.cx + dx, cy: im.cy + dy }));
+  const shapes = cloneShapes(items.shapes ?? [], dx, dy);
   const before = snapshot();
   commitSnapshot(before, {
     strokes: [...before.strokes, ...strokes],
     texts: [...before.texts, ...texts],
     images: [...page().images, ...images],
+    shapes: [...(before.shapes ?? []), ...shapes],
   });
   if (state.tool !== 'lasso') {
     update((s) => {
@@ -368,7 +482,36 @@ export function insert(items: Items, dx: number, dy = dx) {
     strokes.map((s) => s.id),
     texts.map((t) => t.id),
     images.map((i) => i.id),
+    shapes.map((s) => s.id),
   );
+}
+
+/** Copies of shapes, moved by (dx, dy): new ids, groups kept together, arrows bound to copies. */
+function cloneShapes(list: Shape[], dx: number, dy: number): Shape[] {
+  const ids = new Map(list.map((s) => [s.id, uid()]));
+  const groups = new Map<string, string>();
+  const map = shapesById([...(page().shapes ?? []), ...list]);
+  return list.map((s) => {
+    const { bindStart, bindEnd, group, locked: _locked, ...rest } = s;
+    const copy: Shape = { ...rest, id: ids.get(s.id)! };
+    if (group) {
+      if (!groups.has(group)) groups.set(group, uid());
+      copy.group = groups.get(group);
+    }
+    if (isBox(s)) {
+      copy.cx = s.cx + dx;
+      copy.cy = s.cy + dy;
+      return copy;
+    }
+    const { a, b } = shapeEnds(s, map);
+    copy.x1 = a.x + dx;
+    copy.y1 = a.y + dy;
+    copy.x2 = b.x + dx;
+    copy.y2 = b.y + dy;
+    if (bindStart && ids.has(bindStart)) copy.bindStart = ids.get(bindStart);
+    if (bindEnd && ids.has(bindEnd)) copy.bindEnd = ids.get(bindEnd);
+    return copy;
+  });
 }
 
 let pendingPaste = false;
@@ -396,8 +539,248 @@ function recolor(color: string) {
   commitSnapshot(before, {
     strokes: before.strokes.map((s) => (selected.strokes.has(s.id) ? { ...s, color } : s)),
     texts: before.texts.map((t) => (selected.texts.has(t.id) ? { ...t, color } : t)),
+    shapes: (before.shapes ?? []).map((s) => (selected.shapes.has(s.id) ? { ...s, color } : s)),
   });
   placeFrame();
+}
+
+// --- Arrange (order, group, lock, align, distribute) and shape style ---
+
+interface Entry {
+  id: string;
+  box: [number, number, number, number];
+}
+/** Every selected item with its box (strokes, text boxes, pictures, shapes). */
+function entries(): Entry[] {
+  const sel = picked();
+  const sMap = shapesById(page().shapes ?? []);
+  return [
+    ...sel.strokes.map((s) => ({ id: s.id, box: bbox(s) })),
+    ...sel.texts.map((t) => {
+      const b = worldBox({ strokes: [], texts: [t], images: [] });
+      return {
+        id: t.id,
+        box: [b.x, b.y, b.x + b.w, b.y + b.h] as [number, number, number, number],
+      };
+    }),
+    ...sel.images.map((im) => ({ id: im.id, box: imageBox(im) })),
+    // An arrow attached to a selected shape follows that shape: it isn't aligned on its own.
+    ...(sel.shapes ?? [])
+      .filter(
+        (s) =>
+          isBox(s) ||
+          !(
+            (s.bindStart && selected.shapes.has(s.bindStart)) ||
+            (s.bindEnd && selected.shapes.has(s.bindEnd))
+          ),
+      )
+      .map((s) => ({ id: s.id, box: shapeBox(s, sMap) })),
+  ];
+}
+
+/** Moves each item by its own offset. */
+function shifted(base: Snapshot, d: Map<string, { dx: number; dy: number }>): Snapshot {
+  const sMap = shapesById(base.shapes ?? []);
+  return {
+    strokes: base.strokes.map((s) => {
+      const o = d.get(s.id);
+      if (!o) return s;
+      return {
+        ...s,
+        points: s.points.map((v, i) => (i % 3 === 0 ? v + o.dx : i % 3 === 1 ? v + o.dy : v)),
+      };
+    }),
+    texts: base.texts.map((t) => {
+      const o = d.get(t.id);
+      return o ? { ...t, x: t.x + o.dx, y: t.y + o.dy } : t;
+    }),
+    images: (base.images ?? []).map((im) => {
+      const o = d.get(im.id);
+      return o ? { ...im, cx: im.cx + o.dx, cy: im.cy + o.dy } : im;
+    }),
+    shapes: (base.shapes ?? []).map((s) => {
+      const o = d.get(s.id);
+      if (!o) return s;
+      if (isBox(s)) return { ...s, cx: s.cx + o.dx, cy: s.cy + o.dy };
+      const { a, b } = shapeEnds(s, sMap);
+      const { bindStart: _a, bindEnd: _b, ...rest } = s;
+      return { ...rest, x1: a.x + o.dx, y1: a.y + o.dy, x2: b.x + o.dx, y2: b.y + o.dy };
+    }),
+  };
+}
+
+type Align = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
+function align(mode: Align) {
+  const es = entries();
+  if (es.length < 2) return;
+  const x0 = Math.min(...es.map((e) => e.box[0]));
+  const x1 = Math.max(...es.map((e) => e.box[2]));
+  const y0 = Math.min(...es.map((e) => e.box[1]));
+  const y1 = Math.max(...es.map((e) => e.box[3]));
+  const d = new Map(
+    es.map((e) => {
+      const [a, b, c, f] = e.box;
+      const dx =
+        { left: x0 - a, hcenter: (x0 + x1) / 2 - (a + c) / 2, right: x1 - c }[mode as 'left'] ?? 0;
+      const dy =
+        { top: y0 - b, vcenter: (y0 + y1) / 2 - (b + f) / 2, bottom: y1 - f }[mode as 'top'] ?? 0;
+      return [e.id, { dx: Number.isFinite(dx) ? dx : 0, dy: Number.isFinite(dy) ? dy : 0 }];
+    }),
+  );
+  const before = snapshot();
+  commitSnapshot(before, shifted(before, d));
+  placeFrame();
+}
+
+/** Equal gaps between the middle items; the outer two stay where they are. */
+function distribute(axis: 'h' | 'v') {
+  const es = entries();
+  if (es.length < 3) return;
+  const lo = axis === 'h' ? 0 : 1;
+  const mid = (e: Entry) => (e.box[lo]! + e.box[lo + 2]!) / 2;
+  const sorted = [...es].sort((a, b) => mid(a) - mid(b));
+  const first = mid(sorted[0]!);
+  const step = (mid(sorted[sorted.length - 1]!) - first) / (sorted.length - 1);
+  const d = new Map(
+    sorted.map((e, i) => {
+      const delta = first + step * i - mid(e);
+      return [e.id, axis === 'h' ? { dx: delta, dy: 0 } : { dx: 0, dy: delta }];
+    }),
+  );
+  const before = snapshot();
+  commitSnapshot(before, shifted(before, d));
+  placeFrame();
+}
+
+/** Applies `fn` to the selected shapes as one undo step. */
+function editShapes(
+  fn: (s: Shape, i: number, all: Shape[]) => Shape,
+  reorder?: (all: Shape[]) => Shape[],
+) {
+  const before = snapshot();
+  const all = before.shapes ?? [];
+  const next = all.map((s, i) => (selected.shapes.has(s.id) ? fn(s, i, all) : s));
+  commitSnapshot(before, {
+    strokes: before.strokes,
+    texts: before.texts,
+    shapes: reorder ? reorder(next) : next,
+  });
+  placeFrame();
+}
+const order = (front: boolean) =>
+  editShapes(
+    (s) => s,
+    (all) => {
+      const mine = all.filter((s) => selected.shapes.has(s.id));
+      const rest = all.filter((s) => !selected.shapes.has(s.id));
+      return front ? [...rest, ...mine] : [...mine, ...rest];
+    },
+  );
+function group(on: boolean) {
+  const g = uid();
+  editShapes((s) => {
+    const { group: _g, ...rest } = s;
+    return on ? { ...rest, group: g } : rest;
+  });
+}
+function lock() {
+  editShapes((s) => ({ ...s, locked: true }));
+  clear(); // a locked shape can't be selected
+  toast('Locked. Unlock from the Shapes panel.', 2500);
+}
+
+const MenuIcon = (node: typeof Copy) => node;
+function arrangeItems() {
+  const n = entries().length;
+  const shapes = selected.shapes.size > 0;
+  const item = (label: string, ic: typeof Copy, run: () => void) => ({
+    label,
+    icon: MenuIcon(ic),
+    run,
+  });
+  return [
+    ...(shapes
+      ? [
+          item('Bring to front', BringToFront, () => order(true)),
+          item('Send to back', SendToBack, () => order(false)),
+          item('Group', Group, () => group(true)),
+          item('Ungroup', Ungroup, () => group(false)),
+          item('Lock', Lock, lock),
+        ]
+      : []),
+    ...(n >= 2
+      ? [
+          ...(shapes ? ['sep' as const] : []),
+          item('Align left', AlignStartVertical, () => align('left')),
+          item('Align centre', AlignCenterVertical, () => align('hcenter')),
+          item('Align right', AlignEndVertical, () => align('right')),
+          item('Align top', AlignStartHorizontal, () => align('top')),
+          item('Align middle', AlignCenterHorizontal, () => align('vcenter')),
+          item('Align bottom', AlignEndHorizontal, () => align('bottom')),
+        ]
+      : []),
+    ...(n >= 3
+      ? [
+          'sep' as const,
+          item('Distribute horizontally', AlignHorizontalDistributeCenter, () => distribute('h')),
+          item('Distribute vertically', AlignVerticalDistributeCenter, () => distribute('v')),
+        ]
+      : []),
+  ];
+}
+
+function styleItems() {
+  const chosen = picked().shapes ?? [];
+  const same = <K extends 'fill' | 'dash'>(k: K, v: Shape[K]) =>
+    chosen.length > 0 && chosen.every((s) => s[k] === v);
+  const item = (label: string, checked: boolean, run: () => void) => ({
+    label,
+    icon: PaintBucket,
+    checked,
+    run,
+  });
+  const lines = chosen.filter((s) => !isBox(s));
+  return [
+    ...(chosen.some(isBox)
+      ? [
+          item('No fill', same('fill', 'none'), () =>
+            editShapes((s) => (isBox(s) ? { ...s, fill: 'none' } : s)),
+          ),
+          item('Light fill', same('fill', 'tint'), () =>
+            editShapes((s) => (isBox(s) ? { ...s, fill: 'tint' } : s)),
+          ),
+          item('Solid fill', same('fill', 'solid'), () =>
+            editShapes((s) => (isBox(s) ? { ...s, fill: 'solid' } : s)),
+          ),
+          item('Hatched', same('fill', 'hatch'), () =>
+            editShapes((s) => (isBox(s) ? { ...s, fill: 'hatch' } : s)),
+          ),
+          'sep' as const,
+        ]
+      : []),
+    item('Solid line', same('dash', 'solid'), () => editShapes((s) => ({ ...s, dash: 'solid' }))),
+    item('Dashed line', same('dash', 'dashed'), () =>
+      editShapes((s) => ({ ...s, dash: 'dashed' })),
+    ),
+    item('Dotted line', same('dash', 'dotted'), () =>
+      editShapes((s) => ({ ...s, dash: 'dotted' })),
+    ),
+    ...(lines.length
+      ? [
+          'sep' as const,
+          item(
+            'Arrow head',
+            lines.every((s) => s.kind === 'arrow'),
+            () =>
+              editShapes((s) =>
+                isBox(s)
+                  ? s
+                  : { ...s, kind: lines.every((l) => l.kind === 'arrow') ? 'line' : 'arrow' },
+              ),
+          ),
+        ]
+      : []),
+  ];
 }
 
 // --- Gestures ---
@@ -429,6 +812,7 @@ function drag(
     page().strokes = last.strokes;
     page().texts = last.texts;
     if (last.images) page().images = last.images;
+    if (last.shapes) page().shapes = last.shapes;
     redraw();
     renderTexts();
     placeFrame();
@@ -441,6 +825,7 @@ function drag(
     page().strokes = base.strokes;
     page().texts = base.texts;
     if (base.images) page().images = base.images;
+    if (base.shapes) page().shapes = base.shapes;
     commitSnapshot(base, last);
     placeFrame();
   };
@@ -528,10 +913,20 @@ bg.addEventListener('pointerdown', (e) => {
     );
     // A picture is selected when the loop goes around its centre.
     const images = page().images.filter((im) => inside({ x: im.cx, y: im.cy }, loop));
+    // A shape when the loop goes around its centre; locked ones can't be picked, and a grouped
+    // shape brings its whole group.
+    const all = page().shapes ?? [];
+    const sMap = shapesById(all);
+    const hit = all.filter((s) => !s.locked && inside(shapeCentre(s, sMap), loop));
+    const groups = new Set(hit.flatMap((s) => (s.group ? [s.group] : [])));
+    const shapes = groups.size
+      ? all.filter((s) => !s.locked && (hit.includes(s) || (s.group && groups.has(s.group))))
+      : hit;
     select(
       strokes.map((s) => s.id),
       texts.map((t) => t.id),
       images.map((i) => i.id),
+      shapes.map((s) => s.id),
     );
   };
   bg.addEventListener('pointermove', move);
@@ -585,6 +980,8 @@ subscribe(() => {
   for (const id of selected.texts) if (!tids.has(id)) selected.texts.delete(id);
   const iids = new Set(page().images.map((i) => i.id));
   for (const id of selected.images) if (!iids.has(id)) selected.images.delete(id);
+  const shids = new Set((page().shapes ?? []).map((s) => s.id));
+  for (const id of selected.shapes) if (!shids.has(id)) selected.shapes.delete(id);
   placeFrame();
   updatePasteChip();
 });

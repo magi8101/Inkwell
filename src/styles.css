@@ -1830,6 +1830,43 @@ button.twisty:hover {
   line-height: 1.5;
 }
 
+/* ---------- Shortcut sheet ---------- */
+
+.keys-list {
+  display: grid;
+  grid-template-columns: minmax(120px, 40%) 1fr;
+  gap: 6px 16px;
+  margin: 4px 0 8px;
+}
+
+.keys-list dt,
+.keys-list dd {
+  margin: 0;
+}
+
+.keys-list kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 13px;
+}
+
+.keys-list dd {
+  color: var(--text-2);
+}
+
+/* ---------- Shapes ---------- */
+
+.segmented.five {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.shape-panel {
+  width: 300px;
+}
+
 /* ---------- Markdown notes ---------- */
 
 .md-doc a.wikilink {

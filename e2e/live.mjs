@@ -95,6 +95,46 @@ await host.click('[aria-label="Delete code block"]');
 await wait(900);
 R.codeDeleteReachesGuest = (await guest.$$('.codeblock')).length === 0;
 
+// Shapes are shared: the creator draws a rectangle with the Shapes tool and the guest gets it; when
+// the creator moves it, the guest's copy moves too.
+const shapesOf = (p) =>
+  p.evaluate(async () => {
+    dispatchEvent(new Event('pagehide'));
+    await new Promise((r) => setTimeout(r, 100));
+    return new Promise((resolve) => {
+      const req = indexedDB.open('inkwell');
+      req.onsuccess = () => {
+        const g = req.result.transaction('kv').objectStore('kv').get('inkwell:state');
+        g.onsuccess = () => {
+          const s = g.result;
+          const pages = s.notebooks.flatMap((n) => n.sections.flatMap((x) => x.pages));
+          resolve(pages.find((pg) => pg.id === s.pageId).shapes ?? []);
+        };
+      };
+    });
+  });
+await host.locator('[aria-label="Shapes"]').first().click();
+await host.locator('.shape-panel [aria-label="Rectangle"]').click();
+await host.keyboard.press('Escape');
+await host.mouse.move(300, 600);
+await host.mouse.down();
+await host.mouse.move(380, 640, { steps: 4 });
+await host.mouse.move(460, 680, { steps: 4 });
+await host.mouse.up();
+await wait(1000);
+const gotShapes = await shapesOf(guest);
+R.shapeReachesGuest = gotShapes.length === 1 && gotShapes[0].kind === 'rect';
+const first = (await shapesOf(host))[0];
+await host.mouse.move(380, 640); // the lasso is active with the new shape selected: drag its frame
+const frame = await host.locator('.sel-frame').boundingBox();
+await host.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+await host.mouse.down();
+await host.mouse.move(frame.x + frame.width / 2 + 100, frame.y + frame.height / 2, { steps: 5 });
+await host.mouse.up();
+await wait(1000);
+const movedOnGuest = (await shapesOf(guest))[0];
+R.shapeMoveReachesGuest = !!movedOnGuest && Math.abs(movedOnGuest.cx - first.cx - 100) < 5;
+
 // The creator leaves: the session ends, and the guest keeps the note.
 await openLive(host);
 await host.click('text=End session for everyone');

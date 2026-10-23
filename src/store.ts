@@ -8,7 +8,8 @@ export type Tool =
   | 'lasso'
   | 'text'
   | 'ruler'
-  | 'laser';
+  | 'laser'
+  | 'shape';
 export type InkTool = 'pen' | 'highlighter';
 export type Background =
   | 'blank'
@@ -39,6 +40,42 @@ export interface Stroke {
   /** Flat world-space [x, y, pressure, x, y, pressure, ...]. Strokes are never mutated. */
   points: number[];
 }
+/**
+ * A shape on the page (the Shapes tool). Boxes (rect, ellipse, diamond) have a centre, a size and a
+ * turn; lines and arrows have two ends, each of which an arrow can bind to a box so it follows
+ * that box around. Drawn under the ink, above pictures.
+ */
+export type ShapeKind = 'rect' | 'ellipse' | 'diamond' | 'line' | 'arrow';
+export interface Shape {
+  id: string;
+  kind: ShapeKind;
+  /** Boxes: centre, size, turn (radians). */
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  angle: number;
+  /** Lines and arrows: the two ends (an end bound to a box is worked out from that box). */
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  bindStart?: string;
+  bindEnd?: string;
+  color: string;
+  width: number;
+  opacity: number;
+  /** none; a light tint of the colour; the colour itself; or diagonal hatching. */
+  fill: 'none' | 'tint' | 'solid' | 'hatch';
+  dash: 'solid' | 'dashed' | 'dotted';
+  /** Shapes sharing a group are selected, moved and arranged together. */
+  group?: string;
+  /** A locked shape can't be selected, moved or erased until unlocked. */
+  locked?: boolean;
+}
+export const isBox = (s: Pick<Shape, 'kind'>) =>
+  s.kind === 'rect' || s.kind === 'ellipse' || s.kind === 'diamond';
+
 export type TextFont = 'sans' | 'serif' | 'mono' | 'hand';
 export interface TextBox {
   id: string;
@@ -115,6 +152,8 @@ export interface Page {
   paper?: Paper;
   /** The picture behind the page when `background` is 'picture' (a blob id, like pictures). */
   backdrop?: string;
+  /** Shapes (rectangles, ellipses, arrows…), in drawing order. */
+  shapes?: Shape[];
   /** The page's handwriting read as text (search), and the ink it was read from (ink-index.ts). */
   inkText?: string;
   inkSig?: string;
@@ -237,6 +276,10 @@ export interface State {
    */
   newPen?: boolean;
   snap: boolean;
+  /** The Shapes tool: what the next drag draws, and how it is filled and stroked. */
+  shapeKind: ShapeKind;
+  shapeFill: Shape['fill'];
+  shapeDash: Shape['dash'];
   /** Concepts-style locks: stop two fingers (and the wheel) from zooming / rotating the page. */
   viewLock: { zoom: boolean; rotate: boolean };
   theme: 'system' | 'light' | 'dark';
@@ -347,6 +390,9 @@ function defaults(): State {
     favorites: DEFAULT_FAVORITES.map((f) => ({ ...f })),
     activeFavorite: null,
     snap: true,
+    shapeKind: 'rect',
+    shapeFill: 'none',
+    shapeDash: 'solid',
     viewLock: { zoom: false, rotate: false },
     theme: 'system',
     toolbar: { x: -1, y: 16, collapsed: false },

@@ -35,6 +35,8 @@ import {
   update,
 } from './store';
 import './lasso';
+import './shape-tool';
+import './shortcuts';
 import './laser';
 import './text';
 import './markdown';
@@ -289,6 +291,7 @@ const TOOL_KEYS: Record<string, Tool> = {
   t: 'text',
   r: 'ruler',
   k: 'laser',
+  o: 'shape',
 };
 addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement;

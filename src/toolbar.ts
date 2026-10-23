@@ -7,7 +7,9 @@ import {
   type IconNode,
   LassoSelect,
   Pen,
+  Pipette,
   Presentation,
+  RectangleHorizontal,
   Redo2,
   Ruler,
   Shapes,
@@ -18,6 +20,7 @@ import {
 } from 'lucide';
 import { capture, clamp, h, icon, toast, togglePopover } from './dom';
 import { canRedo, canUndo, redo, undo } from './ink';
+import { shapePanel } from './shape-panel';
 import { editStyle, inkTool, PALETTE, samePen, state, subscribe, type Tool, update } from './store';
 import 'vanilla-colorful/hex-color-picker.js';
 import { BLACK, inkColor } from './stroke';
@@ -31,6 +34,7 @@ export const TOOLS: { id: Tool; label: string; key: string; icon: IconNode }[] =
   { id: 'lasso', label: 'Lasso select', key: 'L', icon: LassoSelect },
   { id: 'text', label: 'Text box', key: 'T', icon: Type },
   { id: 'ruler', label: 'Ruler and straight line', key: 'R', icon: Ruler },
+  { id: 'shape', label: 'Shapes', key: 'O', icon: RectangleHorizontal },
   { id: 'laser', label: 'Laser pointer', key: 'K', icon: Presentation },
 ];
 const MAX_FAVORITES = 10;
@@ -76,10 +80,16 @@ const grip = h(
 );
 const toolButtons = new Map<Tool, HTMLButtonElement>();
 for (const t of TOOLS) {
-  toolButtons.set(
-    t.id,
-    btn(t.label, t.icon, () => setTool(t.id), { title: `${t.label} (${t.key})` }),
+  const b: HTMLButtonElement = btn(
+    t.label,
+    t.icon,
+    () => {
+      setTool(t.id);
+      if (t.id === 'shape') togglePopover(b, shapePanel()); // its kinds, fill and line
+    },
+    { title: `${t.label} (${t.key})` },
   );
+  toolButtons.set(t.id, b);
 }
 const snapBtn = btn(
   'Auto-snap shapes',
@@ -160,6 +170,49 @@ fab.addEventListener('click', () =>
 fab.setAttribute('aria-label', 'Show toolbar');
 fab.title = 'Show toolbar (Tab)';
 
+/** A colour chosen on screen as #rrggbb, or null if cancelled. */
+async function pickFromPage(): Promise<string | null> {
+  const Native = (
+    window as unknown as { EyeDropper?: new () => { open(): Promise<{ sRGBHex: string }> } }
+  ).EyeDropper;
+  if (Native) {
+    try {
+      return (await new Native().open()).sRGBHex;
+    } catch {
+      return null; // cancelled
+    }
+  }
+  const canvas = document.querySelector<HTMLCanvasElement>('#bg')!;
+  toast('Tap a colour on the page.', 3000);
+  return new Promise((resolve) => {
+    const cancel = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      canvas.removeEventListener('pointerdown', tap, true);
+      removeEventListener('keydown', cancel);
+      resolve(null);
+    };
+    const tap = (e: PointerEvent) => {
+      e.preventDefault();
+      e.stopImmediatePropagation(); // the tap picks a colour; it doesn't draw
+      canvas.removeEventListener('pointerdown', tap, true);
+      removeEventListener('keydown', cancel);
+      const r = canvas.getBoundingClientRect();
+      const x = Math.min(
+        canvas.width - 1,
+        Math.max(0, Math.round(((e.clientX - r.left) / r.width) * canvas.width)),
+      );
+      const y = Math.min(
+        canvas.height - 1,
+        Math.max(0, Math.round(((e.clientY - r.top) / r.height) * canvas.height)),
+      );
+      const d = canvas.getContext('2d')!.getImageData(x, y, 1, 1).data;
+      resolve(`#${[d[0], d[1], d[2]].map((v) => v!.toString(16).padStart(2, '0')).join('')}`);
+    };
+    canvas.addEventListener('pointerdown', tap, true);
+    addEventListener('keydown', cancel);
+  });
+}
+
 function stylePanel(): HTMLElement {
   if (isEraser(state.tool)) {
     const out = h('output', {}, `${state.eraserWidth}px`);
@@ -217,6 +270,21 @@ function stylePanel(): HTMLElement {
       custom.setAttribute('aria-expanded', String(!picker.hidden));
     },
   });
+  // Pick a colour from the page: the browser's own eyedropper where it has one (Chromium), else a
+  // tap on the page, which reads the colour drawn there (ink, picture or paper).
+  const eyedrop = h(
+    'button',
+    {
+      class: 'tb-btn',
+      'aria-label': 'Pick a colour from the page',
+      title: 'Pick a colour from the page',
+      onclick: async () => {
+        const c = await pickFromPage();
+        if (c) set({ color: stored(c) });
+      },
+    },
+    icon(Pipette, 18),
+  );
   const widthOut = h('output');
   const opacityOut = h('output');
   const width = h('input', { type: 'range', min: 0.5, max: 40, step: 0.5, 'aria-label': 'Width' });
@@ -319,7 +387,7 @@ function stylePanel(): HTMLElement {
     h('div', { class: 'panel-title' }, tool === 'pen' ? 'Pen' : 'Highlighter', hint),
     preview,
     h('div', { class: 'palette' }, ...swatches),
-    h('div', { class: 'hex-row' }, custom, hex),
+    h('div', { class: 'hex-row' }, custom, hex, eyedrop),
     picker,
     h('label', { class: 'slider' }, h('span', {}, 'Width'), width, widthOut),
     h('label', { class: 'slider' }, h('span', {}, 'Opacity'), opacity, opacityOut),

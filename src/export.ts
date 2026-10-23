@@ -2,7 +2,14 @@ import { FileDown } from 'lucide';
 import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
 import { h, icon, toast, togglePopover } from './dom';
 import { bitmap, blobOf, imageBox, loadAll } from './images';
-import { codeAsText, notebook, type Page, page, sheetOf } from './store';
+import {
+  dashArray,
+  hatch,
+  shapeBox,
+  svgPath as shapeSvgPath,
+  byId as shapesById,
+} from './shape-geom';
+import { codeAsText, isBox, notebook, type Page, page, sheetOf } from './store';
 import { bbox, type FONTS, fontCss, inkColor, LINE_HEIGHT, svgPath, wrapLines } from './stroke';
 import { isTemplate, type Template, templateLines } from './template-lines';
 import { drawPage, isDark, pageColor } from './viewport';
@@ -43,6 +50,14 @@ function contentBox(p: Page) {
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const im of p.images) {
     const k = imageBox(im);
+    x0 = Math.min(x0, k[0]);
+    y0 = Math.min(y0, k[1]);
+    x1 = Math.max(x1, k[2]);
+    y1 = Math.max(y1, k[3]);
+  }
+  const shapeMap = shapesById(p.shapes ?? []);
+  for (const sh of p.shapes ?? []) {
+    const k = shapeBox(sh, shapeMap);
     x0 = Math.min(x0, k[0]);
     y0 = Math.min(y0, k[1]);
     x1 = Math.max(x1, k[2]);
@@ -296,6 +311,36 @@ async function exportPdf(
         width: w,
         height: h,
         rotate: degrees((-im.angle * 180) / Math.PI),
+      });
+    }
+    // Shapes: vector paths in page coordinates (the path origin sits at the page's origin).
+    const shapeList = p.shapes ?? [];
+    const shapeMap = shapesById(shapeList);
+    for (const sh of shapeList) {
+      const col = toRgb(inkColor(sh.color, dark));
+      const at = { x: ox - b.x * scale, y: pageH - (oy - b.y * scale) };
+      const dash = dashArray(sh.dash, sh.width);
+      if (isBox(sh) && sh.fill === 'hatch') {
+        for (const [a, z] of hatch(sh, Math.max(7, sh.width * 3.5))) {
+          pg.drawLine({
+            start: { x: at.x + a.x * scale, y: at.y - a.y * scale },
+            end: { x: at.x + z.x * scale, y: at.y - z.y * scale },
+            thickness: Math.max(1, sh.width * 0.6) * scale,
+            color: col,
+            opacity: sh.opacity,
+          });
+        }
+      }
+      const filled = isBox(sh) && (sh.fill === 'tint' || sh.fill === 'solid');
+      pg.drawSvgPath(shapeSvgPath(sh, shapeMap), {
+        ...at,
+        scale,
+        ...(filled ? { color: col, opacity: sh.opacity * (sh.fill === 'tint' ? 0.18 : 1) } : {}),
+        borderColor: col,
+        borderWidth: sh.width * scale,
+        borderOpacity: sh.opacity,
+        borderLineCap: 1,
+        ...(dash.length ? { borderDashArray: dash.map((d) => d * scale) } : {}),
       });
     }
     // PDF y grows upward; SVG paths are drawn downward from (x, y), so anchor at the top-left.

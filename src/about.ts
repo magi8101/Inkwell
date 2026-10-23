@@ -1,6 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { Info, X } from 'lucide';
 import { h, icon, SERVER } from './dom';
+import { openShortcuts } from './shortcuts';
 
 // "About Inkwell": the version, and how the app works — every algorithm it uses, in plain words.
 
@@ -56,6 +57,18 @@ const ALGORITHMS: [string, string][] = [
   ],
   ['Code blocks', 'Code is compiled and run on Compiler Explorer (godbolt.org) for free.'],
   [
+    'Shapes and arrows',
+    'Rectangles, ellipses, diamonds, lines and arrows are stored as shapes, not ink: a centre, size and turn, or two ends. An arrow that starts or ends on a shape binds to it: each end is worked out as where the line towards the other end leaves that shape, so it follows when the shape moves. Points snap to other shapes’ edges and centres.',
+  ],
+  [
+    'Page templates',
+    'Cornell, music and graph paper are described once as line segments on the sheet, and the screen, thumbnails, PNGs and PDFs all draw from that one description.',
+  ],
+  [
+    'Search handwriting',
+    'Optionally, each page’s ink is split into bands of lines, read on this device with Tesseract while idle, and the text is kept with the page. Search ignores spaces and punctuation and forgives a letter or two (an edit-distance match) because reading handwriting makes mistakes.',
+  ],
+  [
     'Markdown notes',
     'Typed notes edited with Tiptap: Markdown shortcuts turn into formatting as you type, and the note is saved back as plain Markdown (read and written with marked), so .md files open and save unchanged.',
   ],
@@ -106,7 +119,12 @@ export function openAbout() {
             { href: `${SERVER}/download`, target: '_blank', rel: 'noopener' },
             'download page',
           ),
-          '. Installed apps update themselves.',
+          '. Installed apps update themselves. ',
+          h(
+            'button',
+            { class: 'cal-btn', onclick: () => openShortcuts() },
+            'Keyboard shortcuts (?)',
+          ),
         ),
         h('h2', { class: 'cal-title' }, 'How it works'),
         h(

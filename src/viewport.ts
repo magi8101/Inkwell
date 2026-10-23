@@ -1,6 +1,8 @@
 import { Locate, Lock, LockOpen, Maximize, RotateCcw, Scan, ZoomIn, ZoomOut } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
 import { drawImages, imageBox, onImageLoaded } from './images';
+import { drawShapes } from './shape-draw';
+import { shapeBox, byId as shapesById } from './shape-geom';
 import { type Background, type Page, page, sheetOf, state, subscribe, update } from './store';
 import { bbox as bboxOf, drawStroke, drawTextBox, setRenderTuning } from './stroke';
 import { isTemplate } from './template-lines';
@@ -163,6 +165,7 @@ export function drawPage(
   c.setTransform(...viewMatrix(1, v));
   const dark = isDark(color);
   drawImages(c, p.images); // pictures sit under all ink, like printouts on paper
+  drawShapes(c, p.shapes ?? [], dark); // shapes: above pictures, still under the ink
   // Highlighter sits under pen ink, like a real highlighter on paper.
   for (const s of p.strokes) if (s.tool === 'highlighter') drawStroke(c, s, dark);
   for (const s of p.strokes) if (s.tool !== 'highlighter') drawStroke(c, s, dark);
@@ -278,12 +281,13 @@ function animateTo(target: { x: number; y: number; scale: number; angle?: number
 
 const boxCache = new WeakMap<
   Page['strokes'],
-  { texts: Page['texts']; images: Page['images']; box: number[] | null }
+  { texts: Page['texts']; images: Page['images']; shapes: Page['shapes']; box: number[] | null }
 >();
 /** World-space box around the page's ink and text, or null for an empty page. */
 function contentBox(p: Page): number[] | null {
   const hit = boxCache.get(p.strokes);
-  if (hit && hit.texts === p.texts && hit.images === p.images) return hit.box;
+  if (hit && hit.texts === p.texts && hit.images === p.images && hit.shapes === p.shapes)
+    return hit.box;
   let b: number[] | null = null;
   const grow = (x0: number, y0: number, x1: number, y1: number) => {
     b = b
@@ -298,10 +302,16 @@ function contentBox(p: Page): number[] | null {
     const k = imageBox(im);
     grow(k[0], k[1], k[2], k[3]);
   }
+  const sh = p.shapes ?? [];
+  const map = shapesById(sh);
+  for (const s of sh) {
+    const k = shapeBox(s, map);
+    grow(k[0], k[1], k[2], k[3]);
+  }
   // Text height is approximate (explicit lines only); good enough to frame it.
   for (const t of p.texts)
     grow(t.x, t.y, t.x + t.w, t.y + t.text.split('\n').length * t.size * 1.3);
-  boxCache.set(p.strokes, { texts: p.texts, images: p.images, box: b });
+  boxCache.set(p.strokes, { texts: p.texts, images: p.images, shapes: p.shapes, box: b });
   return b;
 }
 

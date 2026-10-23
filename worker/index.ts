@@ -177,6 +177,7 @@ export class LiveSession extends DurableObject<Env> {
   private strokes = new Map<string, Item>();
   private texts: Item[] = [];
   private codes: Item[] = [];
+  private shapes: Item[] = [];
   /** The shared note's Markdown, when the shared page is a Markdown note. */
   private md: string | null = null;
   private meta: Record<string, unknown> = {};
@@ -205,6 +206,7 @@ export class LiveSession extends DurableObject<Env> {
       this.strokes.clear();
       this.texts = [];
       this.codes = [];
+      this.shapes = [];
       this.md = null;
       this.meta = {};
     }
@@ -218,6 +220,7 @@ export class LiveSession extends DurableObject<Env> {
         meta: this.meta,
         texts: this.texts,
         codes: this.codes,
+        shapes: this.shapes,
         md: this.md,
       }),
     );
@@ -253,6 +256,7 @@ export class LiveSession extends DurableObject<Env> {
       ids?: string[];
       texts?: Item[];
       codes?: Item[];
+      shapes?: Item[];
       md?: string | null;
       meta?: object;
       x?: number;
@@ -279,6 +283,10 @@ export class LiveSession extends DurableObject<Env> {
       case 'codes':
         if (!Array.isArray(m.codes)) return;
         this.codes = m.codes;
+        break;
+      case 'shapes':
+        if (!Array.isArray(m.shapes)) return;
+        this.shapes = m.shapes;
         break;
       case 'md':
         if (m.md !== null && typeof m.md !== 'string') return;
@@ -317,6 +325,7 @@ export class LiveSession extends DurableObject<Env> {
     this.strokes.clear();
     this.texts = [];
     this.codes = [];
+    this.shapes = [];
     this.md = null;
     this.meta = {};
   }

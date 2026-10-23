@@ -1,11 +1,13 @@
 import { capture, h } from './dom';
 import { predict, type Sample } from './predict';
 import { densify, recognize } from './shape';
+import { byId as shapesById, touches as shapeTouches, unbindGone } from './shape-geom';
 import {
   type CodeBlock,
   type ImageItem,
   inkTool,
   page,
+  type Shape,
   type Stroke,
   state,
   subscribe,
@@ -135,6 +137,8 @@ export interface Snapshot {
   images?: ImageItem[];
   /** Same for code blocks. */
   codes?: CodeBlock[];
+  /** Same for shapes. */
+  shapes?: Shape[];
 }
 /** One edit: the page content just before and just after it. */
 interface Step {
@@ -146,6 +150,7 @@ interface Step {
 }
 /** A page without code blocks: one shared array, so "no code blocks" always compares equal. */
 export const NO_CODES: CodeBlock[] = [];
+export const NO_SHAPES: Shape[] = [];
 const history = new Map<string, { undo: Step[]; redo: Step[] }>();
 function stacks() {
   let h = history.get(page().id);
@@ -165,6 +170,7 @@ export const snapshot = (): Snapshot => ({
   texts: page().texts,
   images: page().images,
   codes: page().codes ?? NO_CODES,
+  shapes: page().shapes ?? NO_SHAPES,
 });
 
 function restore(s: Snapshot) {
@@ -173,6 +179,7 @@ function restore(s: Snapshot) {
     page().texts = s.texts;
     if (s.images) page().images = s.images;
     if (s.codes) page().codes = s.codes;
+    if (s.shapes) page().shapes = s.shapes;
   });
 }
 
@@ -205,6 +212,7 @@ function apply(from: Snapshot, to: Snapshot) {
     texts: rebase(cur.texts, from.texts, to.texts),
     images: rebase(cur.images ?? [], from.images ?? [], to.images ?? []),
     codes: rebase(cur.codes ?? NO_CODES, from.codes ?? NO_CODES, to.codes ?? NO_CODES),
+    shapes: rebase(cur.shapes ?? NO_SHAPES, from.shapes ?? NO_SHAPES, to.shapes ?? NO_SHAPES),
   });
 }
 
@@ -214,16 +222,23 @@ export function commitSnapshot(before: Snapshot, after: Snapshot, key?: string) 
     before.strokes === after.strokes &&
     before.texts === after.texts &&
     (after.images === undefined || before.images === after.images) &&
-    (after.codes === undefined || before.codes === after.codes)
+    (after.codes === undefined || before.codes === after.codes) &&
+    (after.shapes === undefined || before.shapes === after.shapes)
   ) {
     return;
   }
   const h = stacks();
   const images = before.images ?? page().images;
   const codes = before.codes ?? page().codes ?? NO_CODES;
+  const shapes = before.shapes ?? page().shapes ?? NO_SHAPES;
   const step: Step = {
-    before: { ...before, images, codes },
-    after: { ...after, images: after.images ?? images, codes: after.codes ?? codes },
+    before: { ...before, images, codes, shapes },
+    after: {
+      ...after,
+      images: after.images ?? images,
+      codes: after.codes ?? codes,
+      shapes: after.shapes ?? shapes,
+    },
     key,
     at: performance.now(),
   };
@@ -262,6 +277,8 @@ interface Gesture {
   id: number;
   /** pointerType that started it ('pen', 'touch', 'mouse'). */
   type: string;
+  /** The page's shapes when it began (an eraser stroke can take shapes too). */
+  beforeShapes: Shape[];
   /** When it last received a sample (performance.now()). */
   lastAt: number;
   mode: Mode;
@@ -452,9 +469,21 @@ function eraseAt(a: Gesture, x: number, y: number, r: number): boolean {
     a.mode === 'erase'
       ? before.filter((s) => !hits(s, x, y, r))
       : before.flatMap((s) => cut(s, x, y, r, uid));
-  if (after.length === before.length && after.every((s, i) => s === before[i])) return false;
-  page().strokes = after; // committed to history on pointerup
-  return true;
+  let changed = !(after.length === before.length && after.every((s, i) => s === before[i]));
+  if (changed) page().strokes = after; // committed to history on pointerup
+  // The stroke eraser takes whole shapes too (not locked ones); the pixel eraser leaves them.
+  const shapes = page().shapes ?? NO_SHAPES;
+  if (a.mode === 'erase' && shapes.length) {
+    const map = shapesById(shapes);
+    const gone = new Set(
+      shapes.filter((s) => !s.locked && shapeTouches(s, { x, y }, r, map)).map((s) => s.id),
+    );
+    if (gone.size) {
+      page().shapes = shapes.filter((s) => !gone.has(s.id)).map((s) => unbindGone(s, gone, map));
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 const STALE_MS = 250;
@@ -661,6 +690,7 @@ function finish(keep: boolean) {
   }
   if (!keep) {
     page().strokes = a.before;
+    page().shapes = a.beforeShapes;
     redraw();
   } else if (a.mode === 'line') {
     const { tool, color, width, opacity, points } = a;
@@ -700,7 +730,10 @@ function finish(keep: boolean) {
     }
     commit(a.before, [...a.before, { id: uid(), tool, color, width, opacity, pressure, points }]);
   } else {
-    commit(a.before, page().strokes);
+    commitSnapshot(
+      { strokes: a.before, texts: page().texts, shapes: a.beforeShapes },
+      { strokes: page().strokes, texts: page().texts, shapes: page().shapes ?? NO_SHAPES },
+    );
   }
   // Clear after the main canvas has painted the committed stroke, so it never blinks.
   requestAnimationFrame(() => {
@@ -776,6 +809,7 @@ bg.addEventListener('pointerdown', (e) => {
     pressure: e.pointerType === 'pen',
     points: [],
     before: page().strokes,
+    beforeShapes: page().shapes ?? NO_SHAPES,
     last: null,
     hold: null,
     shape: null,

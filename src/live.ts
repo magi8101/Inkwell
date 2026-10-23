@@ -10,6 +10,7 @@ import {
   notebook,
   type Page,
   page,
+  type Shape,
   type Stroke,
   state,
   subscribe,
@@ -47,6 +48,7 @@ interface Session {
     texts: TextBox[];
     meta: string;
     codes: CodeBlock[] | undefined;
+    shapes: Shape[] | undefined;
     md: string | undefined;
   };
   ended: boolean;
@@ -144,6 +146,41 @@ function cleanCode(c: unknown): CodeBlock | null {
     ...(typeof x.stdin === 'string' ? { stdin: x.stdin.slice(0, 20_000) } : {}),
   };
 }
+const SHAPE_KINDS = ['rect', 'ellipse', 'diamond', 'line', 'arrow'];
+function cleanShape(v: unknown): Shape | null {
+  const x = v as Shape;
+  if (!x || typeof x.id !== 'string' || x.id.length > 64 || !SHAPE_KINDS.includes(x.kind))
+    return null;
+  if (![x.cx, x.cy, x.w, x.h, x.angle, x.x1, x.y1, x.x2, x.y2, x.width, x.opacity].every(num))
+    return null;
+  if (!hex(x.color) || !['none', 'tint', 'solid', 'hatch'].includes(x.fill)) return null;
+  if (!['solid', 'dashed', 'dotted'].includes(x.dash)) return null;
+  const id = (s: unknown) => (typeof s === 'string' && s.length <= 64 ? s : undefined);
+  return {
+    id: x.id,
+    kind: x.kind,
+    cx: x.cx,
+    cy: x.cy,
+    w: x.w,
+    h: x.h,
+    angle: x.angle,
+    x1: x.x1,
+    y1: x.y1,
+    x2: x.x2,
+    y2: x.y2,
+    color: x.color,
+    width: Math.min(200, Math.max(0.1, x.width)),
+    opacity: Math.min(1, Math.max(0, x.opacity)),
+    fill: x.fill,
+    dash: x.dash,
+    ...(id(x.bindStart) ? { bindStart: id(x.bindStart) } : {}),
+    ...(id(x.bindEnd) ? { bindEnd: id(x.bindEnd) } : {}),
+    ...(id(x.group) ? { group: id(x.group) } : {}),
+    ...(x.locked === true ? { locked: true } : {}),
+  };
+}
+const cleanShapes = (v: unknown) =>
+  (Array.isArray(v) ? v : []).map(cleanShape).filter((s): s is Shape => !!s);
 const cleanCodes = (v: unknown) =>
   (Array.isArray(v) ? v : []).map(cleanCode).filter((c): c is CodeBlock => !!c);
 const cleanMd = (v: unknown) => (typeof v === 'string' ? v.slice(0, 500_000) : undefined);
@@ -193,6 +230,10 @@ subscribe(() => {
     send({ t: 'codes', codes: p.codes ?? [] });
     sent.codes = p.codes;
   }
+  if (p.shapes !== sent.shapes) {
+    send({ t: 'shapes', shapes: p.shapes ?? [] });
+    sent.shapes = p.shapes;
+  }
   if (p.md !== sent.md) {
     send({ t: 'md', md: p.md ?? null });
     sent.md = p.md;
@@ -221,6 +262,7 @@ const sentOf = (p: Page) => ({
   texts: p.texts,
   meta: metaOf(p),
   codes: p.codes,
+  shapes: p.shapes,
   md: p.md,
 });
 
@@ -260,6 +302,7 @@ function receive(raw: string) {
         send({ t: 'meta', meta: JSON.parse(metaOf(p)) });
         send({ t: 'texts', texts: p.texts });
         send({ t: 'codes', codes: p.codes ?? [] });
+        send({ t: 'shapes', shapes: p.shapes ?? [] });
         send({ t: 'md', md: p.md ?? null });
         sendStrokes(p.strokes);
         s.sent = sentOf(p);
@@ -272,6 +315,7 @@ function receive(raw: string) {
             ? newPage(`Live ${pretty(s.code)}`)
             : newMarkdownPage(`Live ${pretty(s.code)}`, md);
         copy.codes = cleanCodes(m.codes);
+        copy.shapes = cleanShapes(m.shapes);
         copy.texts = ((m.texts as unknown[]) ?? []).map(cleanText).filter((t): t is TextBox => !!t);
         applyMeta(copy, m.meta);
         applying = true;
@@ -328,6 +372,13 @@ function receive(raw: string) {
       const codes = cleanCodes(m.codes);
       applyRemote((p) => {
         p.codes = codes;
+      });
+      return;
+    }
+    case 'shapes': {
+      const shapes = cleanShapes(m.shapes);
+      applyRemote((p) => {
+        p.shapes = shapes;
       });
       return;
     }
@@ -391,7 +442,7 @@ function connect(code: string, host: boolean) {
     me: null,
     peers: new Map(),
     pageId: page().id,
-    sent: { strokes: [], texts: [], meta: '', codes: undefined, md: undefined },
+    sent: { strokes: [], texts: [], meta: '', codes: undefined, shapes: undefined, md: undefined },
     ended: false,
   };
   ws.addEventListener('message', (e) => {

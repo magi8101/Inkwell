@@ -19,6 +19,7 @@ import {
   RotateCw,
   Scissors,
   SendToBack,
+  Stamp as StampIcon,
   Trash2,
   Type,
   Ungroup,
@@ -35,6 +36,7 @@ import {
   byId as shapesById,
   unbindGone,
 } from './shape-geom';
+import { addStamp, type Stamp, setInserter } from './stamps';
 import {
   type ImageItem,
   isBox,
@@ -317,6 +319,7 @@ function renderBar() {
     btn('Cut (Ctrl+X)', Scissors, cut),
     btn('Duplicate (Ctrl+D)', CopyPlus, duplicate),
     btn('Copy as a picture', ImageIcon, () => void copyAsPicture()),
+    btn('Save as stamp', StampIcon, () => void saveStamp()),
     ...([...selected.strokes].length
       ? [btn('Convert handwriting to text', Type, () => void toText())]
       : []),
@@ -417,16 +420,12 @@ function cut() {
   remove();
 }
 
-/** The selection as a PNG on the system clipboard (or a download where the browser can't). */
-async function copyAsPicture() {
-  if (!hasSelection()) return;
-  const sel = picked();
+/** Renders items on a plain page as a PNG blob, `scale` px per page px, with `pad` around them. */
+async function renderItems(sel: Items, scale: number, pad: number) {
   const b = worldBox(sel);
-  const pad = 16;
-  const scale = Math.min(2, 3000 / Math.max(b.w + pad * 2, b.h + pad * 2, 1));
-  const w = Math.ceil((b.w + pad * 2) * scale);
-  const ph = Math.ceil((b.h + pad * 2) * scale);
-  // Just the selected items on a plain page (no sheet, no template around them).
+  const w = Math.max(1, Math.ceil((b.w + pad * 2) * scale));
+  const ph = Math.max(1, Math.ceil((b.h + pad * 2) * scale));
+  // Just these items on a plain page (no sheet, no template around them).
   const sub = {
     ...page(),
     strokes: sel.strokes,
@@ -449,7 +448,52 @@ async function copyAsPicture() {
     { x: (pad - b.x) * scale, y: (pad - b.y) * scale, scale },
     scale,
   );
-  const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
+  return { c, blob: await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png')), box: b };
+}
+
+/** Keeps the selection as a stamp: the items moved to the origin, with a preview. */
+async function saveStamp() {
+  if (!hasSelection()) return;
+  const sel = picked();
+  const { c, box } = await renderItems(sel, Math.min(1, 120 / Math.max(box0(sel), 1)), 4);
+  const norm = (dx: number, dy: number): Stamp['items'] => ({
+    strokes: sel.strokes.map((s) => ({
+      ...s,
+      points: s.points.map((v, i) => (i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v)),
+    })),
+    texts: sel.texts.map((t) => ({ ...t, x: t.x + dx, y: t.y + dy })),
+    images: sel.images.map((im) => ({ ...im, cx: im.cx + dx, cy: im.cy + dy })),
+    shapes: cloneShapes(sel.shapes ?? [], dx, dy),
+  });
+  await addStamp({
+    id: uid(),
+    name: `Stamp ${new Date().toLocaleDateString()}`,
+    items: norm(-box.x, -box.y),
+    w: box.w,
+    h: box.h,
+    thumb: c.toDataURL('image/png'),
+  });
+  toast('Saved as a stamp. Use it from Insert → Stamps.', 2800);
+}
+const box0 = (sel: Items) => {
+  const b = worldBox(sel);
+  return Math.max(b.w, b.h);
+};
+// A stamp goes in the middle of the screen, selected.
+setInserter((s) => {
+  const r = bg.getBoundingClientRect();
+  const c = toWorld(r.left + r.width / 2, r.top + r.height / 2);
+  insert(s.items, c.x - s.w / 2, c.y - s.h / 2);
+});
+
+/** The selection as a PNG on the system clipboard (or a download where the browser can't). */
+async function copyAsPicture() {
+  if (!hasSelection()) return;
+  const sel = picked();
+  const b = worldBox(sel);
+  const pad = 16;
+  const scale = Math.min(2, 3000 / Math.max(b.w + pad * 2, b.h + pad * 2, 1));
+  const { blob } = await renderItems(sel, scale, pad);
   if (!blob) return toast('Couldn’t make the picture.', 2500);
   try {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);

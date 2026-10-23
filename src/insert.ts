@@ -8,6 +8,7 @@ import {
   ImagePlus,
   Images,
   NotebookText,
+  Shapes,
 } from 'lucide';
 import {
   offerBundle,
@@ -23,6 +24,7 @@ import { insert, takeOverPaste } from './lasso';
 import { importMarkdown, isMarkdown } from './markdown';
 import { importOneNote } from './onenote';
 import { importPdf } from './pdf-import';
+import { openStamps } from './stamps';
 import { type ImageItem, uid } from './store';
 import { toWorld, view } from './viewport';
 
@@ -164,6 +166,7 @@ insertButton.addEventListener('click', () =>
   openMenu(insertButton, [
     { label: 'Picture from files…', icon: Images, run: () => input.click() },
     { label: 'Paste picture', icon: ClipboardPaste, run: () => void pasteFromClipboard() },
+    { label: 'Stamps (saved selections)…', icon: Shapes, run: () => openStamps(insertButton) },
     'sep',
     { label: 'PDF (to write on)…', icon: FileText, run: () => pdfInput.click() },
     { label: 'Markdown file (.md)…', icon: FileType, run: () => mdInput.click() },

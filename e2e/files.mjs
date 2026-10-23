@@ -109,6 +109,46 @@ for (const [name, engine] of [['Chromium', chromium], ['Firefox', firefox], ['We
   });
   R.copiesPng = copied.png && copied.size > 300;
 
+  // --- Stamps: save the selection, insert it from the Insert menu, it survives a reload ---
+  const shapeCount = () =>
+    p.evaluate(async () => {
+      dispatchEvent(new Event('pagehide'));
+      await new Promise((r) => setTimeout(r, 150));
+      return new Promise((res) => {
+        const q = indexedDB.open('inkwell');
+        q.onsuccess = () => {
+          const g = q.result.transaction('kv').objectStore('kv').get('inkwell:state');
+          g.onsuccess = () => {
+            const s = g.result;
+            res((s.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === s.pageId).shapes ?? []).length);
+          };
+        };
+      });
+    });
+  const before = await shapeCount();
+  await p.locator('.selbar [aria-label="Save as stamp"]').click(); // the rectangle is still selected
+  await p.waitForTimeout(600);
+  await p.keyboard.press('Escape');
+  await p.locator('[aria-label="Insert"]').click();
+  await p.locator('.menu .menu-item', { hasText: 'Stamps' }).click();
+  await p.waitForSelector('.stamp-use');
+  R.stampSaved = (await p.locator('.stamp-use').count()) === 1;
+  await p.locator('.stamp-use').first().click();
+  await p.waitForTimeout(400);
+  R.stampInserts = (await shapeCount()) === before + 1;
+  R.stampInsertedSelected = await p.locator('.sel-frame').isVisible();
+  await p.keyboard.press('Escape');
+  await p.reload();
+  await p.waitForSelector('#toolbar .tb-btn');
+  await p.locator('[aria-label="Insert"]').click();
+  await p.locator('.menu .menu-item', { hasText: 'Stamps' }).click();
+  await p.waitForSelector('.stamp-use');
+  R.stampSurvivesReload = (await p.locator('.stamp-use').count()) === 1;
+  await p.locator('.stamp-del').click();
+  await p.waitForTimeout(300);
+  R.stampDeletes = (await p.locator('.stamp-use').count()) === 0;
+  await p.keyboard.press('Escape');
+
   R.noErrors = errors.length === 0;
   await browser.close();
   console.log(`${name}: ${Object.values(R).every(Boolean) ? 'ok' : 'FAIL'}`);

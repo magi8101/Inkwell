@@ -12,6 +12,7 @@ import {
   Copy,
   CopyPlus,
   Group,
+  Image as ImageIcon,
   Layers,
   Lock,
   PaintBucket,
@@ -24,7 +25,7 @@ import {
   X,
 } from 'lucide';
 import { capture, clamp, h, icon, openMenu, toast } from './dom';
-import { imageBox } from './images';
+import { imageBox, loadAll } from './images';
 import { commitSnapshot, type Snapshot, snapshot } from './ink';
 import { recognizeInk } from './ocr';
 import {
@@ -50,7 +51,17 @@ import {
 import { bbox, LINE_HEIGHT } from './stroke';
 import { renderTexts } from './text';
 import { colorName, shown } from './toolbar';
-import { isPalm, penSeen, redraw, tooBig, toScreen, touchCount, toWorld, view } from './viewport';
+import {
+  drawPage,
+  isPalm,
+  penSeen,
+  redraw,
+  tooBig,
+  toScreen,
+  touchCount,
+  toWorld,
+  view,
+} from './viewport';
 
 // Lasso (L): draw a loop around ink and text boxes to select them. Drag inside the frame to move,
 // the corner handle to resize, the round handle to rotate. Text boxes move and scale with the
@@ -305,6 +316,7 @@ function renderBar() {
     btn('Copy (Ctrl+C)', Copy, copy),
     btn('Cut (Ctrl+X)', Scissors, cut),
     btn('Duplicate (Ctrl+D)', CopyPlus, duplicate),
+    btn('Copy as a picture', ImageIcon, () => void copyAsPicture()),
     ...([...selected.strokes].length
       ? [btn('Convert handwriting to text', Type, () => void toText())]
       : []),
@@ -403,6 +415,52 @@ function remove() {
 function cut() {
   copy();
   remove();
+}
+
+/** The selection as a PNG on the system clipboard (or a download where the browser can't). */
+async function copyAsPicture() {
+  if (!hasSelection()) return;
+  const sel = picked();
+  const b = worldBox(sel);
+  const pad = 16;
+  const scale = Math.min(2, 3000 / Math.max(b.w + pad * 2, b.h + pad * 2, 1));
+  const w = Math.ceil((b.w + pad * 2) * scale);
+  const ph = Math.ceil((b.h + pad * 2) * scale);
+  // Just the selected items on a plain page (no sheet, no template around them).
+  const sub = {
+    ...page(),
+    strokes: sel.strokes,
+    texts: sel.texts,
+    images: sel.images,
+    shapes: sel.shapes ?? [],
+    codes: undefined,
+    paper: undefined,
+    background: 'blank',
+  } as ReturnType<typeof page>;
+  await loadAll([sub]);
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = ph;
+  drawPage(
+    c.getContext('2d')!,
+    w,
+    ph,
+    sub,
+    { x: (pad - b.x) * scale, y: (pad - b.y) * scale, scale },
+    scale,
+  );
+  const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
+  if (!blob) return toast('Couldn’t make the picture.', 2500);
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    toast('Copied as a picture — paste it anywhere.', 2200);
+  } catch {
+    const a = h('a', { href: URL.createObjectURL(blob), download: 'inkwell-selection.png' });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    toast('Saved as a picture (this browser can’t copy images).', 2800);
+  }
 }
 
 /** Reads the selected handwriting and replaces it with a text box (Undo brings the ink back). */

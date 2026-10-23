@@ -16,7 +16,7 @@ import { drawPage, isDark, pageColor } from './viewport';
 
 // Export to PDF (vector strokes, real text) or PNG. pdf-lib is loaded only when exporting.
 
-type Format = 'pdf' | 'png';
+type Format = 'pdf' | 'png' | 'svg';
 type Scope = 'page' | 'pages' | 'notebook';
 type Size = 'fit' | 'a4' | 'letter';
 
@@ -138,6 +138,19 @@ async function exportPng(raw: Page, paper: boolean) {
   const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
   if (!blob) throw new Error('Could not encode PNG');
   return download(blob, fileName(p.title, 'png'));
+}
+
+/** The page as an SVG file (see svg-export.ts). */
+async function exportSvg(raw: Page, paper: boolean) {
+  const p = withCode(raw);
+  const sheet = sheetOf(p);
+  const b = sheet ? { x: 0, y: 0, w: sheet[0], h: sheet[1] } : contentBox(p);
+  const margin = sheet ? 0 : PNG_MARGIN;
+  const box = { x: b.x - margin, y: b.y - margin, w: b.w + margin * 2, h: b.h + margin * 2 };
+  const color = paper ? WHITE : pageColor(p.pageColor);
+  const { pageToSvg } = await import('./svg-export');
+  const svg = await pageToSvg(p, box, color, isDark(color));
+  return download(new Blob([svg], { type: 'image/svg+xml' }), fileName(p.title, 'svg'));
 }
 
 // --- PDF: vector strokes via SVG paths, text with the standard PDF fonts ---
@@ -531,6 +544,7 @@ function panel(): HTMLElement {
     [
       ['pdf', 'PDF'],
       ['png', 'PNG'],
+      ['svg', 'SVG'],
     ],
     () => format,
     (v) => {
@@ -618,6 +632,7 @@ function panel(): HTMLElement {
     try {
       let saved: boolean;
       if (format === 'png') saved = await exportPng(page(), paper);
+      else if (format === 'svg') saved = await exportSvg(page(), paper);
       else {
         const all = notebook().sections.flatMap((s) => s.pages);
         const picked =

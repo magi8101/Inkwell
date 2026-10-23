@@ -115,6 +115,9 @@ export interface Page {
   paper?: Paper;
   /** The picture behind the page when `background` is 'picture' (a blob id, like pictures). */
   backdrop?: string;
+  /** The page's handwriting read as text (search), and the ink it was read from (ink-index.ts). */
+  inkText?: string;
+  inkSig?: string;
   landscape?: boolean;
 }
 export type Paper = 'a4' | 'a3' | 'letter';
@@ -190,6 +193,8 @@ export interface Tuning {
    * and nothing here can tell which of two changes did that.
    */
   stylusTouchCancel: boolean;
+  /** Read each page's handwriting on this device in the background so search can find it. */
+  indexInk: boolean;
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -210,6 +215,7 @@ export const DEFAULT_TUNING: Tuning = {
   cursorImage: '',
   ocrOnline: false,
   stylusTouchCancel: false,
+  indexInk: false,
 };
 
 export interface State {

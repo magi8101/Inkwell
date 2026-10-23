@@ -107,11 +107,14 @@ async function online(strokes: Stroke[]): Promise<string | null> {
   }
 }
 
-/** Reads handwriting. Highlighter marks are ignored. */
-export async function recognizeInk(strokes: Stroke[]): Promise<string> {
+/**
+ * Reads handwriting. Highlighter marks are ignored. `allowOnline: false` always reads on this
+ * device, whatever the online setting says (background indexing never sends anything anywhere).
+ */
+export async function recognizeInk(strokes: Stroke[], allowOnline = true): Promise<string> {
   const ink = strokes.filter((s) => s.tool === 'pen');
   if (!ink.length) return '';
-  if (state.tuning.ocrOnline) {
+  if (allowOnline && state.tuning.ocrOnline) {
     const text = await online(ink);
     if (text !== null) return text;
   }

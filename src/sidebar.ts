@@ -25,6 +25,7 @@ import {
 } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
 import { imageBox, imagesVersion, onImageLoaded } from './images';
+import { fuzzyIncludes } from './ink-bands';
 import { addContentsPage, addMarkdownNote } from './markdown';
 import {
   childFolders,
@@ -628,7 +629,13 @@ function results(q: string): HTMLElement[] {
           ...(p.codes ?? []).map((c) => c.code),
           p.md ?? '',
         ];
-        if (!haystack.some((t) => t.toLowerCase().includes(needle))) continue;
+        // Handwriting read in the background (Pen feel → Search handwriting) has reading mistakes,
+        // so it is matched forgivingly.
+        if (
+          !haystack.some((t) => t.toLowerCase().includes(needle)) &&
+          !(p.inkText && fuzzyIncludes(p.inkText, q))
+        )
+          continue;
         hits.push(
           h(
             'button',

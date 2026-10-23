@@ -38,6 +38,7 @@ import './lasso';
 import './laser';
 import './text';
 import './markdown';
+import './ink-index';
 import './update';
 import { setTool } from './toolbar';
 import { openTuning, tuneButton } from './tune';

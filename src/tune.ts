@@ -141,7 +141,8 @@ function panel(): HTMLElement {
     | 'hoverPreview'
     | 'tapGestures'
     | 'ocrOnline'
-    | 'stylusTouchCancel';
+    | 'stylusTouchCancel'
+    | 'indexInk';
   const toggle = (key: BoolKey, label: string) => {
     const box = h('input', {
       type: 'checkbox',
@@ -165,6 +166,10 @@ function panel(): HTMLElement {
     toggle(
       'ocrOnline',
       'Convert to text: read handwriting online (Cloudflare AI, more accurate; sends a picture of the selected ink)',
+    ),
+    toggle(
+      'indexInk',
+      'Search handwriting: read your pages in the background, on this device, so search finds what you wrote',
     ),
     toggle('tapGestures', 'Two-finger tap undo, three-finger tap redo'),
     toggle(

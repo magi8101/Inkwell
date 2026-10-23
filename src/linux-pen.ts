@@ -11,6 +11,8 @@ const IN_LINUX_APP =
   /Linux/.test(navigator.userAgent) &&
   !/Android/.test(navigator.userAgent);
 const PEN_ID = 7701;
+/** For the pen report: how many pen events the system sent, and how many mouse events became pen. */
+export const bridge = { fromSystem: 0, swapped: 0, unswapped: 0 };
 
 if (IN_LINUX_APP) {
   let tool: 'pen' | 'eraser' | null = null;
@@ -25,6 +27,7 @@ if (IN_LINUX_APP) {
     tx: number,
     ty: number,
   ) => {
+    bridge.fromSystem++;
     tool = t === 'pen' || t === 'eraser' ? t : null;
     pressure = p;
     tiltX = tx;
@@ -80,7 +83,12 @@ if (IN_LINUX_APP) {
       type,
       (e) => {
         const m = e as PointerEvent;
-        if (m.pointerType !== 'mouse' || !m.isTrusted || !penActive()) return;
+        if (m.pointerType !== 'mouse' || !m.isTrusted) return;
+        if (!penActive()) {
+          if (type === 'pointerdown') bridge.unswapped++;
+          return;
+        }
+        if (type === 'pointerdown') bridge.swapped++;
         mouseId = m.pointerId;
         m.stopImmediatePropagation();
         // WebKit: the tip is the left button (1), the side button the middle one (4).

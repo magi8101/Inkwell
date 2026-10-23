@@ -11,6 +11,7 @@ import {
 } from './calibration';
 import { capture, h, IS_MAC, icon, toast } from './dom';
 import { inkStats, inkTrailAvailable, lowLatencyCanvas, pressLog } from './ink';
+import { bridge } from './linux-pen';
 import { type Tuning, update } from './store';
 
 // "Calibrate my pen": a guided series of tasks with the user's own stylus. Each step measures
@@ -247,6 +248,12 @@ function advice(m: Measurements, l: ReturnType<typeof latency>): string[] {
   return out;
 }
 
+let appVersion = '';
+if ('__TAURI_INTERNALS__' in window)
+  void import('@tauri-apps/api/app').then(async (m) => {
+    appVersion = await m.getVersion();
+  });
+
 function reportText(m: Measurements, r: Result, applied: boolean): string {
   const l = latency(m);
   const fast = m.fast.flat();
@@ -258,6 +265,11 @@ function reportText(m: Measurements, r: Result, applied: boolean): string {
     `  Platform: ${(navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ?? navigator.platform}${IS_MAC ? ' (Mac/iPad)' : ''}`,
     `  Screen: ${screen.width}×${screen.height} @${devicePixelRatio}x, refresh ≈ ${Math.round(1000 / l.frame)} Hz, touch points ${navigator.maxTouchPoints}`,
     `  CPU threads: ${navigator.hardwareConcurrency ?? '?'}`,
+    ...(appVersion
+      ? [
+          `  App: Inkwell ${appVersion}; pen bridge: ${bridge.fromSystem} pen events from the system, ${bridge.swapped} presses seen as pen, ${bridge.unswapped} presses left as mouse`,
+        ]
+      : []),
     '',
     'PEN',
     `  Type reported: ${m.penType}; pressure: ${m.light.length ? `${median(m.light.map((s) => s.p)).toFixed(2)} light / ${median(m.firm.map((s) => s.p)).toFixed(2)} firm` : 'n/a'}; tilt: ${m.tilt ? 'yes' : 'no'}`,

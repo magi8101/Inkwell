@@ -235,6 +235,33 @@ async fn vault_remove(app: tauri::AppHandle, path: &str) -> Result<(), String> {
     }
 }
 
+/// Turns off `WebView2`'s pinch zoom, which scaled the whole app on a touchscreen instead of
+/// letting the page zoom the canvas (as it does in Edge). The setting applies from the next
+/// navigation, so the page is reloaded once at startup.
+#[cfg(windows)]
+#[allow(unsafe_code)] // COM calls into WebView2; the interfaces come from wry's live controller
+fn no_pinch_zoom(window: &tauri::WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings5;
+    use windows_core::Interface;
+    let _ = window.with_webview(|w| {
+        // SAFETY: the controller is valid for the duration of this callback, on the UI thread.
+        let done = unsafe {
+            w.controller()
+                .CoreWebView2()
+                .and_then(|core| {
+                    core.Settings()?
+                        .cast::<ICoreWebView2Settings5>()?
+                        .SetIsPinchZoomEnabled(false)?;
+                    core.Reload()
+                })
+                .is_ok()
+        };
+        if !done {
+            eprintln!("could not turn off WebView2 pinch zoom");
+        }
+    });
+}
+
 /// Starts the app.
 ///
 /// # Panics
@@ -261,6 +288,15 @@ pub fn run() {
             vault_mkdir,
             vault_remove
         ])
+        .setup(|app| {
+            #[cfg(windows)]
+            if let Some(w) = app.get_webview_window("main") {
+                no_pinch_zoom(&w);
+            }
+            #[cfg(not(windows))]
+            let _ = app;
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

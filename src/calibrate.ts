@@ -37,6 +37,10 @@ interface Measurements {
   /** Pen sample timestamp → our handler, ms. */
   queueDelay: number[];
   frameMs: number[];
+  /** Raw input while the wizard is open: "pointermove pen hover" → count, buttons values, sizes. */
+  raw: Map<string, number>;
+  rawButtons: Set<number>;
+  rawMaxContact: number;
 }
 
 interface Step {
@@ -121,6 +125,9 @@ function fresh(): Measurements {
     eventTiming: [],
     queueDelay: [],
     frameMs: [],
+    raw: new Map(),
+    rawButtons: new Set(),
+    rawMaxContact: 0,
   };
 }
 
@@ -257,6 +264,10 @@ function reportText(m: Measurements, r: Result, applied: boolean): string {
     `  Hover: ${m.hover === null ? 'not tested' : m.hover ? `yes (${Math.round(m.hoverRate)} Hz)` : 'no'}; side button: ${m.sideButton ? 'yes' : 'not detected'}; eraser end: ${m.eraserEnd ? 'yes' : 'not detected'}`,
     `  Sample rate while writing: ${Math.round(sampleRate(fast))} Hz`,
     '',
+    'RAW INPUT (what the browser delivered during calibration)',
+    `  ${[...m.raw].map(([k, n]) => `${k} ×${n}`).join(', ') || 'nothing'}`,
+    `  buttons values: ${[...m.rawButtons].sort((a, b) => a - b).join(', ') || 'none'}; largest touch contact: ${Math.round(m.rawMaxContact)} px; pointerrawupdate: ${'onpointerrawupdate' in window ? 'yes' : 'no'}`,
+    '',
     'DELAY (stylus → screen)',
     `  Pen-down → frame on screen (measured): ${Number.isFinite(l.toFrame) ? `${round1(l.toFrame)} ms` : 'n/a'}`,
     `  Pen-down → next paint (Event Timing API): ${Number.isFinite(l.et) ? `${round1(l.et)} ms` : 'not available in this browser (or under 16 ms)'}`,
@@ -340,6 +351,32 @@ export function openCalibration() {
   );
   const overlay = h('div', { class: 'cal-overlay' }, card);
   document.body.append(overlay);
+
+  // Everything that arrives, wherever it lands: if a step can't see the pen, this says why.
+  const log = (e: Event) => {
+    const p = e as PointerEvent;
+    const kind = 'pointerType' in p ? p.pointerType || '?' : '';
+    const hover = p.type === 'pointermove' && p.buttons === 0 ? ' hover' : '';
+    const key = `${e.type}${kind ? ` ${kind}` : ''}${hover}`;
+    m.raw.set(key, (m.raw.get(key) ?? 0) + 1);
+    if ('buttons' in p) m.rawButtons.add(p.buttons);
+    if (kind === 'touch') m.rawMaxContact = Math.max(m.rawMaxContact, p.width, p.height);
+  };
+  const RAW = [
+    'pointerdown',
+    'pointermove',
+    'pointerup',
+    'pointercancel',
+    'mousedown',
+    'touchstart',
+    'contextmenu',
+  ];
+  for (const t of RAW) addEventListener(t, log, { capture: true, passive: true });
+  new MutationObserver((_, obs) => {
+    if (overlay.isConnected) return;
+    for (const t of RAW) removeEventListener(t, log, { capture: true });
+    obs.disconnect();
+  }).observe(document.body, { childList: true });
 
   // Frame interval while calibrating (refresh rate), measured continuously.
   let raf = 0;

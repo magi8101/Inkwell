@@ -564,6 +564,9 @@ async function suite() {
   R.calibrationSetsPressure = tuning.thinning !== 0.55 || tuning.pressureGamma !== 1;
   R.calibrationSetsPrediction = tuning.predictAuto === false;
   R.calibrationReport = report.includes('DELAY (stylus → screen)') && report.includes('CALIBRATION (applied)');
+  // The raw input log saw the simulated pen (down and hover) and touches.
+  R.calibrationRawInput = /pointerdown pen ×\d/.test(report) && /pointermove pen hover ×\d/.test(report) && /pointerdown touch ×\d/.test(report);
+  if (!R.calibrationRawInput) console.log(report.split('RAW INPUT')[1]?.split('DELAY')[0]);
   document.querySelector('.cal-close').click();
   R.calibrationCloses = !document.querySelector('.cal-overlay');
   R.errors = errors;

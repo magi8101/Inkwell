@@ -27,6 +27,11 @@ tauri-plugin-fs = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 
+# Windows: switching off WebView2's own pinch zoom (it scaled the whole app, not the page).
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows-core = "0.62"
+
 [profile.release]
 codegen-units = 1
 lto = true
@@ -35,7 +40,8 @@ strip = true
 panic = "abort"
 
 [lints.rust]
-unsafe_code = "forbid"
+# deny, not forbid: the one WebView2 settings call (COM) is unsafe; see no_pinch_zoom.
+unsafe_code = "deny"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

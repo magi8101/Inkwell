@@ -2130,3 +2130,13 @@ body.md-page #zoom {
     align-items: center;
   }
 }
+
+/* Colour panel: keep a changed pen as a new favourite, or update the one it came from. */
+.pen-save {
+  display: grid;
+  gap: 2px;
+}
+
+.pen-save[hidden] {
+  display: none;
+}

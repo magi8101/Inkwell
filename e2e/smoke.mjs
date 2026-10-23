@@ -26,6 +26,8 @@ async function suite() {
   };
   const pg = async () => (await stored()).notebooks[0].sections[0].pages[0];
   const btn = (l) => document.querySelector(`[aria-label="${l}"]`);
+  const menuItemNow = (label) =>
+    [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.trim() === label);
   let pid = 100;
   const ev = (type, x, y, o = {}) =>
     bg.dispatchEvent(
@@ -323,6 +325,28 @@ async function suite() {
   R.addPenAddsOne = favs1.length === favs0.length + 1;
   R.newPenGetsColour = favs1.at(-1).color === '#e5484d';
   R.defaultPenUnchanged = favs1[0].color === favs0[0].color;
+  // Reported: pick pen 1, open the colour changer, pick a colour → pen 1 changed too. Now only the
+  // current pen changes, and the panel offers to keep it as a new pen or update pen 1.
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); // closes the "new pen" panel
+  await wait(100);
+  document.querySelector('.fav').click(); // pen 1
+  btn('Colour and size').click();
+  await wait(100);
+  document.querySelector('.pal[data-color="#f76b15"]').click();
+  const favs2 = (await stored()).favorites;
+  const saveBtn = menuItemNow('Save as new pen');
+  const updateBtn = menuItemNow('Update pen 1');
+  R.pickedPenNotOverwritten = favs2[0].color === favs0[0].color && favs2.length === favs1.length;
+  R.changedPenOffersSave = !!saveBtn && !saveBtn.hidden && !!updateBtn && !updateBtn.hidden;
+  saveBtn?.click();
+  const favs3 = (await stored()).favorites;
+  R.saveAsNewPenAdds = favs3.length === favs2.length + 1 && favs3.at(-1).color === '#f76b15' && favs3[0].color === favs0[0].color;
+  document.querySelector('.pal[data-color="#8e8e93"]').click();
+  menuItemNow(`Update pen ${favs3.length}`)?.click();
+  const favs4 = (await stored()).favorites;
+  R.updatePenUpdatesIt = favs4.at(-1).color === '#8e8e93' && favs4.length === favs3.length && favs4[0].color === favs0[0].color;
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await wait(100);
   // Folders nest like Obsidian: a folder inside a folder, collapse it, drag a page into it,
   // move it back to the top level, delete a folder with what's inside it.
   const menuItem = (label) =>

@@ -11,13 +11,14 @@ import {
   Redo2,
   Ruler,
   Shapes,
+  Star,
   StarPlus,
   Type,
   Undo2,
 } from 'lucide';
 import { capture, clamp, h, icon, toast, togglePopover } from './dom';
 import { canRedo, canUndo, redo, undo } from './ink';
-import { editStyle, inkTool, PALETTE, state, subscribe, type Tool, update } from './store';
+import { editStyle, inkTool, PALETTE, samePen, state, subscribe, type Tool, update } from './store';
 import 'vanilla-colorful/hex-color-picker.js';
 import { BLACK, inkColor } from './stroke';
 import { pageIsDark } from './viewport';
@@ -118,6 +119,7 @@ const addFav = btn('Add a new pen', StarPlus, () => {
     const tool = inkTool(s.tool);
     s.favorites = [...s.favorites, { tool, ...s.styles[tool] }];
     s.activeFavorite = s.favorites.length - 1;
+    s.newPen = true;
     if (isEraser(s.tool)) s.tool = tool;
   });
   toast('New pen added — pick its colour and size.', 2500);
@@ -229,8 +231,60 @@ function stylePanel(): HTMLElement {
     }),
   );
 
+  // Which favourite this is, and the choice to keep a changed pen as a new one or update the old.
+  const hint = h('span', { class: 'panel-hint' });
+  const saveNew = h(
+    'button',
+    {
+      class: 'menu-item',
+      onclick: () => {
+        if (state.favorites.length >= MAX_FAVORITES) {
+          toast(`Up to ${MAX_FAVORITES} pens — remove one first.`, 3500);
+          return;
+        }
+        update((s) => {
+          s.favorites = [...s.favorites, { tool, ...s.styles[tool] }];
+          s.activeFavorite = s.favorites.length - 1;
+        });
+      },
+    },
+    icon(StarPlus, 18),
+    h('span', {}, 'Save as new pen'),
+  );
+  const updateLabel = h('span');
+  const updateOld = h(
+    'button',
+    {
+      class: 'menu-item',
+      onclick: () =>
+        update((s) => {
+          const i = s.activeFavorite;
+          if (i !== null) s.favorites[i] = { tool, ...s.styles[tool] };
+        }),
+    },
+    icon(Star, 18),
+    updateLabel,
+  );
+  const saveRow = h('div', { class: 'pen-save' }, saveNew, updateOld);
+
   const refresh = () => {
     const s = st();
+    const i = state.activeFavorite;
+    const fav = i === null ? undefined : state.favorites[i];
+    const changed = fav !== undefined && !samePen(fav, s);
+    hint.textContent =
+      i === null
+        ? ''
+        : state.newPen
+          ? ` · new pen ${i + 1}`
+          : changed
+            ? ` · changed from pen ${i + 1}`
+            : ` · pen ${i + 1}`;
+    const saved = state.favorites.some((f) => f.tool === tool && samePen(f, s));
+    saveNew.hidden = saved;
+    updateOld.hidden = !changed || !!state.newPen;
+    updateLabel.textContent = `Update pen ${(i ?? 0) + 1}`;
+    saveRow.hidden = saveNew.hidden && updateOld.hidden;
     for (const b of swatches) {
       const c = b.dataset.color!;
       b.style.setProperty('--c', shown(c));
@@ -262,20 +316,14 @@ function stylePanel(): HTMLElement {
   const panel = h(
     'div',
     { class: 'style-panel' },
-    h(
-      'div',
-      { class: 'panel-title' },
-      tool === 'pen' ? 'Pen' : 'Highlighter',
-      state.activeFavorite !== null
-        ? h('span', { class: 'panel-hint' }, ` · editing favourite ${state.activeFavorite + 1}`)
-        : null,
-    ),
+    h('div', { class: 'panel-title' }, tool === 'pen' ? 'Pen' : 'Highlighter', hint),
     preview,
     h('div', { class: 'palette' }, ...swatches),
     h('div', { class: 'hex-row' }, custom, hex),
     picker,
     h('label', { class: 'slider' }, h('span', {}, 'Width'), width, widthOut),
     h('label', { class: 'slider' }, h('span', {}, 'Opacity'), opacity, opacityOut),
+    saveRow,
     removePenButton(),
   );
   // Keep the open panel in step with shortcuts and favourites.
@@ -284,6 +332,11 @@ function stylePanel(): HTMLElement {
     if (!panel.isConnected) {
       unsub();
       obs.disconnect();
+      // A new pen is done once its panel closes; later edits leave it alone.
+      if (state.newPen)
+        update((s) => {
+          s.newPen = false;
+        });
     }
   }).observe(document.body, { childList: true });
   refresh();
@@ -320,7 +373,9 @@ function removePenButton(): HTMLElement | null {
 function renderFavorites() {
   favs.replaceChildren(
     ...state.favorites.map((f, i) => {
-      const active = state.activeFavorite === i && !isEraser(state.tool);
+      // Lit while it's the pen in use; a changed pen isn't that favourite any more.
+      const active =
+        state.activeFavorite === i && !isEraser(state.tool) && samePen(f, state.styles[f.tool]);
       return h(
         'button',
         {
@@ -334,6 +389,7 @@ function renderFavorites() {
               s.tool = f.tool;
               s.styles[f.tool] = { color: f.color, width: f.width, opacity: f.opacity };
               s.activeFavorite = i;
+              s.newPen = false;
             }),
           oncontextmenu: (e: Event) => {
             e.preventDefault();

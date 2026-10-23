@@ -186,8 +186,15 @@ export interface State {
   styles: Record<InkTool, Style>;
   eraserWidth: number;
   favorites: Favorite[];
-  /** The favourite pen being used; colour/width edits are saved back into it (like OneNote). */
+  /** The favourite pen picked last. Editing the pen doesn't change it, unless it's a new pen. */
   activeFavorite: number | null;
+  /**
+   * The picked favourite was just made with "Add a new pen": colour and size edits go into it
+   * until its colour panel closes. Otherwise edits change only the current pen, and the panel
+   * offers "Save as new pen" / "Update pen N" (feedback: picking pen 1 and changing the colour
+   * to make another pen overwrote pen 1).
+   */
+  newPen?: boolean;
   snap: boolean;
   /** Concepts-style locks: stop two fingers (and the wheel) from zooming / rotating the page. */
   viewLock: { zoom: boolean; rotate: boolean };
@@ -252,12 +259,17 @@ export const newNotebook = (name: string): Notebook => ({
 
 export const inkTool = (t: Tool): InkTool => (t === 'highlighter' ? 'highlighter' : 'pen');
 
-/** Changes a pen's style; if a favourite of that pen type is selected, it's updated too. */
+/** Changes a pen's style; a favourite just added with "Add a new pen" is updated too. */
 export function editStyle(s: State, tool: InkTool, patch: Partial<Style>) {
   Object.assign(s.styles[tool], patch);
   const i = s.activeFavorite;
-  if (i !== null && s.favorites[i]?.tool === tool) s.favorites[i] = { tool, ...s.styles[tool] };
+  if (i !== null && s.newPen && s.favorites[i]?.tool === tool)
+    s.favorites[i] = { tool, ...s.styles[tool] };
 }
+
+/** Whether a favourite is exactly this pen. */
+export const samePen = (f: Favorite, s: Style) =>
+  f.color === s.color && f.width === s.width && f.opacity === s.opacity;
 
 const KEY = 'inkwell:state';
 
@@ -452,6 +464,7 @@ function fixSelection(s: State) {
   const fav = s.activeFavorite === null ? undefined : s.favorites[s.activeFavorite];
   const otherInk = (s.tool === 'pen' || s.tool === 'highlighter') && fav?.tool !== s.tool;
   if (!fav || otherInk) s.activeFavorite = null;
+  if (s.activeFavorite === null) s.newPen = false;
   if (!s.notebooks.length) s.notebooks.push(newNotebook('My Notebook'));
   for (const n of s.notebooks)
     for (const x of n.sections) {

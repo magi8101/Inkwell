@@ -3,6 +3,8 @@ import { capture, h, icon, openMenu } from './dom';
 import { drawImages, imageBox, onImageLoaded } from './images';
 import { type Background, type Page, page, sheetOf, state, subscribe, update } from './store';
 import { bbox as bboxOf, drawStroke, drawTextBox, setRenderTuning } from './stroke';
+import { isTemplate } from './template-lines';
+import { drawTemplate } from './templates';
 
 const GRID = 32;
 /** Room left around content (or a sheet of paper) when fitting it to the screen. */
@@ -149,8 +151,12 @@ export function drawPage(
     c.fill();
     c.shadowColor = 'transparent';
     c.clip();
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    drawBackground(c, w, h, p.background, color, v, px);
+    if (isTemplate(p.background)) {
+      drawTemplate(c, p, sheet, isDark(color), Math.max(1, px * 0.8) / v.scale);
+    } else {
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      drawBackground(c, w, h, p.background, color, v, px);
+    }
     c.restore();
   } else drawBackground(c, w, h, p.background, color, v, px);
   c.save();

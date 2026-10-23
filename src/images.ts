@@ -55,7 +55,11 @@ export function bitmap(id: string): Decoded | null {
 
 /** Waits until every picture on these pages is decoded (for export). */
 export async function loadAll(pages: Page[]) {
-  const ids = [...new Set(pages.flatMap((p) => p.images.map((i) => i.blob)))];
+  const ids = [
+    ...new Set(
+      pages.flatMap((p) => [...p.images.map((i) => i.blob), ...(p.backdrop ? [p.backdrop] : [])]),
+    ),
+  ];
   await Promise.all(
     ids.map((id) => {
       bitmap(id);

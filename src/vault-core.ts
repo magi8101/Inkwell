@@ -47,6 +47,9 @@ export function hash(text: string): string {
 
 export const pageText = (p: Page) => JSON.stringify({ inkwell: 1, ...p });
 
+/** The picture files a page uses: its pictures and its background picture. */
+const blobsOf = (p: Page) => [...p.images.map((i) => i.blob), ...(p.backdrop ? [p.backdrop] : [])];
+
 const extOf = (type: string) =>
   (type.split('/')[1] ?? 'bin').replace('jpeg', 'jpg').replace('svg+xml', 'svg').replace(/\W/g, '');
 
@@ -67,11 +70,8 @@ export function layout(nb: Notebook, types: ReadonlyMap<string, string>): Map<st
       for (const page of sec.pages) {
         const ext = page.md === undefined ? EXT : '.md';
         out.set(`${dir}${unique(safe(page.title), names)}${ext}`, { kind: 'page', page });
-        for (const im of page.images) {
-          out.set(`${ATTACHMENTS}${im.blob}.${extOf(types.get(im.blob) ?? '')}`, {
-            kind: 'att',
-            blob: im.blob,
-          });
+        for (const blob of blobsOf(page)) {
+          out.set(`${ATTACHMENTS}${blob}.${extOf(types.get(blob) ?? '')}`, { kind: 'att', blob });
         }
       }
       walk(sec.id, dir);
@@ -93,8 +93,8 @@ export async function syncOut(
   types: Map<string, string>,
 ) {
   for (const p of nb.sections.flatMap((s) => s.pages)) {
-    for (const im of p.images) {
-      if (!types.has(im.blob)) types.set(im.blob, (await readBlob(im.blob))?.type ?? '');
+    for (const blob of blobsOf(p)) {
+      if (!types.has(blob)) types.set(blob, (await readBlob(blob))?.type ?? '');
     }
   }
   const want = layout(nb, types);
@@ -194,10 +194,10 @@ export async function readDisk(
     page.pageColor ??= 'auto';
     // Pages loose in the top of the folder go into an "Unsorted" folder.
     plan.pages.push({ path: f, dir, page, h });
-    for (const im of page.images) {
-      if (await hasBlob(im.blob)) continue;
-      const file = files.find((x) => x.startsWith(`${ATTACHMENTS}${im.blob}.`));
-      if (file) await putBlob(im.blob, await disk.read(file));
+    for (const blob of blobsOf(page)) {
+      if (await hasBlob(blob)) continue;
+      const file = files.find((x) => x.startsWith(`${ATTACHMENTS}${blob}.`));
+      if (file) await putBlob(blob, await disk.read(file));
     }
   }
   const renamed = new Set(plan.pages.map((p) => p.page.id));

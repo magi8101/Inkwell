@@ -38,6 +38,7 @@ import {
   page,
   type Section,
   section,
+  sheetOf,
   state,
   subscribe,
   uid,
@@ -306,6 +307,10 @@ function thumb(p: Page): HTMLCanvasElement {
     imagesVersion, // a picture finished loading since this thumbnail was drawn
     p.background,
     p.pageColor,
+    p.paper,
+    p.landscape,
+    p.backdrop,
+    p.texts,
     document.documentElement.dataset.theme,
     devicePixelRatio,
   ];
@@ -317,7 +322,12 @@ function thumb(p: Page): HTMLCanvasElement {
   c.width = 72 * dpr;
   c.height = 52 * dpr;
   let v = { x: 4 * dpr, y: 4 * dpr, scale: 0.3 * dpr };
-  if (p.strokes.length || p.images.length) {
+  const sheet = sheetOf(p);
+  if (sheet) {
+    // A sheet of paper shows whole, centred.
+    const scale = Math.min(64 / sheet[0], 44 / sheet[1]) * dpr;
+    v = { x: (c.width - sheet[0] * scale) / 2, y: (c.height - sheet[1] * scale) / 2, scale };
+  } else if (p.strokes.length || p.images.length) {
     // Ink and pictures (a PDF page is a picture) together.
     const b = [...p.strokes.map(bbox), ...p.images.map(imageBox)].reduce((a, k) => [
       Math.min(a[0], k[0]),

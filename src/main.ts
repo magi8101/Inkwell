@@ -1,9 +1,23 @@
 // First, so Linux pen input is fixed up before any other listener sees it (see linux-pen.ts).
 import './linux-pen';
 import './styles.css';
-import { FileText, Grid3x3, Grip, Moon, Rows3, Square, Sun, SunMoon } from 'lucide';
+import {
+  Columns2,
+  FileText,
+  Grid2x2,
+  Grid3x3,
+  Grip,
+  Image as ImageIcon,
+  Moon,
+  Music,
+  Rows3,
+  Square,
+  Sun,
+  SunMoon,
+} from 'lucide';
 import { h, IS_MAC, icon, keys, toast, togglePopover } from './dom';
 import { exportButton, openExport } from './export';
+import { storePicture } from './images';
 import { canRedo, canUndo, redo, undo } from './ink';
 import { insertButton } from './insert';
 import { liveButton } from './live';
@@ -35,6 +49,13 @@ const BACKGROUNDS: { id: Background; label: string; icon: typeof Square }[] = [
   { id: 'grid', label: 'Grid', icon: Grid3x3 },
   { id: 'dots', label: 'Dots', icon: Grip },
   { id: 'lines', label: 'Lines', icon: Rows3 },
+];
+/** Ruled layouts for a sheet of paper; "Picture" uses the page's own background picture. */
+const TEMPLATE_BUTTONS: { id: Background; label: string; icon: typeof Square }[] = [
+  { id: 'cornell', label: 'Cornell', icon: Columns2 },
+  { id: 'staff', label: 'Music', icon: Music },
+  { id: 'graph', label: 'Graph', icon: Grid2x2 },
+  { id: 'picture', label: 'Picture', icon: ImageIcon },
 ];
 const PAGE_COLORS = [
   { c: 'auto', label: 'Match theme' },
@@ -116,6 +137,44 @@ function pagePanel(): HTMLElement {
     ),
   );
   const turnRow = h('div', { class: 'segmented two' }, ...turnButtons);
+  // Templates need a sheet, so picking one puts an infinite page on A4.
+  const useTemplate = (id: Background) => {
+    update(() => {
+      const p = page();
+      p.background = id;
+      p.paper ??= 'a4';
+    });
+    resetView();
+  };
+  const backdropInput = h('input', { type: 'file', accept: 'image/*', hidden: true });
+  backdropInput.addEventListener('change', async () => {
+    const file = backdropInput.files?.[0];
+    backdropInput.value = '';
+    if (!file) return;
+    try {
+      const { blob } = await storePicture(file);
+      update(() => {
+        const p = page();
+        p.backdrop = blob;
+        p.background = 'picture';
+        p.paper ??= 'a4';
+      });
+      resetView();
+    } catch {
+      toast('Couldn’t read that picture.', 3000);
+    }
+  });
+  const templateButtons = TEMPLATE_BUTTONS.map((tb) =>
+    h(
+      'button',
+      {
+        class: 'seg',
+        onclick: () => (tb.id === 'picture' ? backdropInput.click() : useTemplate(tb.id)),
+      },
+      icon(tb.icon, 18),
+      h('span', {}, tb.label),
+    ),
+  );
   const refresh = () => {
     const paper = page().paper ?? 'infinite';
     for (const [i, z] of SIZES.entries())
@@ -126,6 +185,9 @@ function pagePanel(): HTMLElement {
     for (const [i, b] of BACKGROUNDS.entries()) {
       bgButtons[i]!.setAttribute('aria-pressed', String(page().background === b.id));
     }
+    for (const [i, tb] of TEMPLATE_BUTTONS.entries()) {
+      templateButtons[i]!.setAttribute('aria-pressed', String(page().background === tb.id));
+    }
     for (const [i, p] of PAGE_COLORS.entries()) {
       colorButtons[i]!.setAttribute('aria-pressed', String(page().pageColor === p.c));
     }
@@ -135,6 +197,9 @@ function pagePanel(): HTMLElement {
     { class: 'style-panel' },
     h('div', { class: 'panel-title' }, 'Page'),
     h('div', { class: 'segmented' }, ...bgButtons),
+    h('div', { class: 'panel-sub' }, 'Template'),
+    h('div', { class: 'segmented' }, ...templateButtons),
+    backdropInput,
     h('div', { class: 'panel-sub' }, 'Colour'),
     h('div', { class: 'palette page-colors' }, ...colorButtons),
     h('div', { class: 'panel-sub' }, 'Size'),

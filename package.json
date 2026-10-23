@@ -14,7 +14,7 @@
     "tauri": "tauri",
     "preview": "vite preview",
     "share": "lt --port 4173",
-    "check": "node src/stroke.check.ts && node src/shape.check.ts && node src/predict.check.ts && node src/calibration.check.ts && node src/vault.check.ts && node src/download.check.ts && node src/md-pdf.check.ts",
+    "check": "node src/stroke.check.ts && node src/shape.check.ts && node src/predict.check.ts && node src/calibration.check.ts && node src/vault.check.ts && node src/download.check.ts && node src/md-pdf.check.ts && node src/templates.check.ts",
     "deploy": "npm run web:build && wrangler deploy",
     "e2e": "node e2e/smoke.mjs",
     "e2e:live": "node e2e/live.mjs",

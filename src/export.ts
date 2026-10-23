@@ -4,6 +4,7 @@ import { h, icon, toast, togglePopover } from './dom';
 import { bitmap, blobOf, imageBox, loadAll } from './images';
 import { codeAsText, notebook, type Page, page, sheetOf } from './store';
 import { bbox, type FONTS, fontCss, inkColor, LINE_HEIGHT, svgPath, wrapLines } from './stroke';
+import { isTemplate, type Template, templateLines } from './template-lines';
 import { drawPage, isDark, pageColor } from './viewport';
 
 // Export to PDF (vector strokes, real text) or PNG. pdf-lib is loaded only when exporting.
@@ -263,6 +264,19 @@ async function exportPdf(
     const toRgb = (hex: string) => rgb(...rgbOf(hex));
     if (color !== WHITE)
       pg.drawRectangle({ x: 0, y: 0, width: pageW, height: pageH, color: toRgb(color) });
+    // A background picture covers the sheet (the page edge cuts off what overflows).
+    if (p.background === 'picture' && p.backdrop && sheet) {
+      const bg = await embedPicture(p.backdrop);
+      if (bg) {
+        const k = Math.max(pageW / bg.width, pageH / bg.height);
+        pg.drawImage(bg, {
+          x: (pageW - bg.width * k) / 2,
+          y: (pageH - bg.height * k) / 2,
+          width: bg.width * k,
+          height: bg.height * k,
+        });
+      }
+    }
     drawPattern(pg, p, b, scale, ox, oy, pageW, pageH, dark, rgb);
     // Pictures go under the ink, embedded at their original quality.
     for (const im of p.images) {
@@ -349,7 +363,27 @@ function drawPattern(
   dark: boolean,
   rgb: typeof import('pdf-lib').rgb,
 ) {
-  if (p.background === 'blank') return;
+  if (p.background === 'blank' || p.background === 'picture') return;
+  if (isTemplate(p.background)) {
+    // Ruled templates are exactly the lines the screen draws, in sheet coordinates.
+    const sheet = sheetOf(p);
+    if (!sheet) return;
+    const color = dark ? rgb(1, 1, 1) : rgb(0, 0, 0);
+    for (const s of templateLines(
+      p.background as Exclude<Template, 'picture'>,
+      sheet[0],
+      sheet[1],
+    )) {
+      pg.drawLine({
+        start: { x: ox + (s.x1 - b.x) * scale, y: pageH - (oy + (s.y1 - b.y) * scale) },
+        end: { x: ox + (s.x2 - b.x) * scale, y: pageH - (oy + (s.y2 - b.y) * scale) },
+        thickness: s.strong ? 0.9 : 0.5,
+        color,
+        opacity: s.strong ? 0.3 : 0.12,
+      });
+    }
+    return;
+  }
   const step = 32 * scale;
   const startX = ox - (((b.x % 32) + 32) % 32) * scale;
   const startY = oy - (((b.y % 32) + 32) % 32) * scale;

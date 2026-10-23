@@ -10,7 +10,15 @@ export type Tool =
   | 'ruler'
   | 'laser';
 export type InkTool = 'pen' | 'highlighter';
-export type Background = 'blank' | 'grid' | 'dots' | 'lines';
+export type Background =
+  | 'blank'
+  | 'grid'
+  | 'dots'
+  | 'lines'
+  | 'cornell'
+  | 'staff'
+  | 'graph'
+  | 'picture';
 
 export interface Style {
   color: string;
@@ -105,6 +113,8 @@ export interface Page {
   pageColor: string;
   /** A sheet of paper (top-left at 0, 0); absent for an infinite canvas. */
   paper?: Paper;
+  /** The picture behind the page when `background` is 'picture' (a blob id, like pictures). */
+  backdrop?: string;
   landscape?: boolean;
 }
 export type Paper = 'a4' | 'a3' | 'letter';

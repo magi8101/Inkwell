@@ -96,4 +96,4 @@ for (const k of keys) cache.set(k, await d2.embedFont(names[k]));
 assert.equal(await drawMarkdown(d2, '', fonts, rgb), 1);
 assert.ok((await drawMarkdown(d2, '<div>html</div>\n\n***\n\n| a |\n|---|\n', fonts, rgb)) >= 1);
 if (process.argv[2]) writeFileSync(process.argv[2], await doc.save());
-console.log('md-pdf checks passed (' + pages + ' pages)');
+console.log(`md-pdf checks passed (${pages} pages)`);

@@ -73,7 +73,14 @@ const sharedPage = () => {
     if (p) return p;
   }
 };
-const metaOf = (p: Page) => JSON.stringify({ background: p.background, pageColor: p.pageColor });
+/** What the guests' copy of the page needs to look the same: not the background picture (a file). */
+const metaOf = (p: Page) =>
+  JSON.stringify({
+    background: p.background === 'picture' ? 'blank' : p.background,
+    pageColor: p.pageColor,
+    paper: p.paper ?? null,
+    landscape: !!p.landscape,
+  });
 
 // --- What others send is data: keep only well-formed strokes and text boxes ---
 
@@ -140,7 +147,8 @@ function cleanCode(c: unknown): CodeBlock | null {
 const cleanCodes = (v: unknown) =>
   (Array.isArray(v) ? v : []).map(cleanCode).filter((c): c is CodeBlock => !!c);
 const cleanMd = (v: unknown) => (typeof v === 'string' ? v.slice(0, 500_000) : undefined);
-const BACKGROUNDS: Background[] = ['blank', 'dots', 'grid', 'lines'];
+const BACKGROUNDS: Background[] = ['blank', 'dots', 'grid', 'lines', 'cornell', 'staff', 'graph'];
+const PAPERS = ['a4', 'a3', 'letter'];
 
 // --- Sending ---
 
@@ -363,6 +371,11 @@ function applyMeta(p: Page, meta: unknown) {
   const x = (meta ?? {}) as Partial<Page>;
   if (BACKGROUNDS.includes(x.background as Background)) p.background = x.background!;
   if (x.pageColor === 'auto' || hex(x.pageColor)) p.pageColor = x.pageColor!;
+  const m = (meta ?? {}) as { paper?: unknown; landscape?: unknown };
+  if (m.paper === null) delete p.paper;
+  else if (typeof m.paper === 'string' && PAPERS.includes(m.paper))
+    p.paper = m.paper as Page['paper'];
+  if (typeof m.landscape === 'boolean') p.landscape = m.landscape;
 }
 
 // --- Starting, joining, leaving ---

@@ -344,6 +344,28 @@ async function suite() {
     st2.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === st2.pageId)?.paper === undefined;
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await wait(100);
+  // Templates: Cornell and music paper put an infinite page on A4 with that ruling; Blank and
+  // Infinite put it back.
+  const curPage = async () => {
+    const s = await stored();
+    return s.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === s.pageId);
+  };
+  btn('Page style').click();
+  await wait(100);
+  seg('Cornell').click();
+  await wait(150);
+  const cornell = await curPage();
+  R.templateCornellSetsSheet = cornell.background === 'cornell' && cornell.paper === 'a4';
+  seg('Music').click();
+  await wait(150);
+  R.templateMusic = (await curPage()).background === 'staff';
+  seg('Blank').click();
+  seg('Infinite').click();
+  await wait(150);
+  const plain = await curPage();
+  R.templateBackToPlain = plain.background === 'blank' && plain.paper === undefined;
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await wait(100);
   // Reported on iPad: after one stroke the next one only worked 1–2 seconds later. A pen whose lift
   // was never delivered must not block the next press: the new press ends the old stroke and draws.
   const nowPage = async () => {

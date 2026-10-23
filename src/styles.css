@@ -279,8 +279,10 @@ button:disabled {
 }
 
 .fab.corner-left {
+  /* Bottom-left, where the toolbar (which can span the top) never covers it. */
   left: 12px;
-  top: 12px;
+  top: auto;
+  bottom: 12px;
   margin: 0;
   border-radius: 14px;
   color: var(--text-2);
@@ -1392,6 +1394,11 @@ button.twisty:hover {
   align-items: center;
 }
 
+/* Beside the show-sidebar button while the sidebar is hidden. */
+#sidebar-open:not([hidden]) ~ #pager {
+  left: 68px;
+}
+
 .pager .tb-btn:disabled {
   opacity: 0.35;
 }
@@ -1420,8 +1427,9 @@ button.twisty:hover {
 
 /* ---------- Phones and narrow windows ---------- */
 
-@media (max-width: 700px), (max-height: 500px) {
-  /* The sidebar slides over the page instead of squeezing it; it closes after picking a page. */
+/* Phones, tablets and a Surface in portrait: the sidebar slides over the page instead of
+   squeezing it; it closes after picking a page or touching the page (sidebar.ts). */
+@media (max-width: 960px), (max-height: 500px) {
   #sidebar {
     position: fixed;
     inset: 0 auto 0 0;
@@ -1429,7 +1437,9 @@ button.twisty:hover {
     width: min(320px, 86vw);
     box-shadow: var(--shadow);
   }
+}
 
+@media (max-width: 700px), (max-height: 500px) {
   /* One row of tools that scrolls sideways, rather than a tall column over the page. */
   #toolbar {
     flex-wrap: nowrap;
@@ -1460,16 +1470,6 @@ button.twisty:hover {
 
   .pill:not(.pager) {
     right: 72px;
-  }
-
-  /* The sidebar button moves to the bottom-left corner, out of the toolbar's way. */
-  .fab.corner-left {
-    top: auto;
-    bottom: 12px;
-  }
-
-  .pager {
-    left: 68px;
   }
 
   .pill .tb-btn {
@@ -1587,10 +1587,6 @@ button.twisty:hover {
     width: 36px;
   }
 
-  .pager {
-    left: 64px;
-  }
-
   .page-no {
     min-width: 40px;
   }
@@ -1600,7 +1596,8 @@ button.twisty:hover {
    the sidebar button so the corner buttons have the bottom row; if they still don't fit (very
    small phones) they scroll sideways. */
 @container stage (max-width: 600px) {
-  .pager {
+  .pager,
+  #sidebar-open:not([hidden]) ~ #pager {
     left: 12px;
     bottom: 68px;
   }

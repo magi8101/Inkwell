@@ -55,9 +55,9 @@ import {
 import { drawPage } from './viewport';
 
 const aside = document.querySelector<HTMLElement>('#sidebar')!;
-// On phones the sidebar slides over the page (see styles.css): it starts closed, and closes after
-// a page is picked or the page is touched.
-const narrow = matchMedia('(max-width: 700px), (max-height: 500px)');
+// On phones and tablets the sidebar slides over the page (see styles.css): it starts closed, and
+// closes after a page is picked or the page is touched.
+const narrow = matchMedia('(max-width: 960px), (max-height: 500px)');
 if (narrow.matches) state.sidebarOpen = false;
 const closeIfNarrow = (s: typeof state) => {
   if (narrow.matches) s.sidebarOpen = false;
@@ -695,6 +695,16 @@ addEventListener('keydown', (e) => {
 });
 subscribe(renderPager);
 renderPager();
+
+// Showing and hiding is instant (waiting for idle made the hide button feel broken); opening fills
+// the lists straight away, since they weren't kept up to date while hidden.
+let shown = state.sidebarOpen;
+subscribe(() => {
+  aside.hidden = !state.sidebarOpen;
+  openBtn.hidden = state.sidebarOpen;
+  if (state.sidebarOpen && !shown) render();
+  shown = state.sidebarOpen;
+});
 
 // The sidebar (lists and thumbnails) refreshes when idle, so it never delays the pen.
 onImageLoaded(() => update(() => {}));

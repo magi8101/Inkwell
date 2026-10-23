@@ -174,6 +174,12 @@ export interface Tuning {
   cursorImage: string;
   /** Convert to text: read handwriting with Cloudflare AI online (more accurate) instead of on the device. */
   ocrOnline: boolean;
+  /**
+   * iPad: cancel the Pencil's touch events on the page, which stops Scribble from dropping or
+   * delaying strokes. Off by default: it came together with lines breaking into beads on an iPad,
+   * and nothing here can tell which of two changes did that.
+   */
+  stylusTouchCancel: boolean;
 }
 
 export const DEFAULT_TUNING: Tuning = {
@@ -193,6 +199,7 @@ export const DEFAULT_TUNING: Tuning = {
   cursor: 'dot',
   cursorImage: '',
   ocrOnline: false,
+  stylusTouchCancel: false,
 };
 
 export interface State {

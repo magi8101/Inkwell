@@ -353,11 +353,21 @@ async function suite() {
   const strokesBefore = (await nowPage()).strokes.length;
   ev('pointerdown', 200, 700, { id: 801 });
   for (let i = 1; i <= 8; i++) ev('pointermove', 200 + i * 6, 700 + i, { id: 801 });
+  await wait(350); // the lift never came: the stroke has gone quiet
   ev('pointerdown', 320, 700, { id: 802 }); // no pointerup for 801
   for (let i = 1; i <= 8; i++) ev('pointermove', 320 + i * 6, 700 + i, { id: 802 });
   ev('pointerup', 372, 708, { id: 802 });
   await wait(150);
   R.lostLiftDoesNotBlockNextStroke = (await nowPage()).strokes.length === strokesBefore + 2;
+  // An echo: a second pen press while the stroke is still being written must not cut it in two.
+  const s2 = (await nowPage()).strokes.length;
+  ev('pointerdown', 200, 640, { id: 811 });
+  for (let i = 1; i <= 6; i++) ev('pointermove', 200 + i * 6, 640 + i, { id: 811 });
+  ev('pointerdown', 236, 646, { id: 812 }); // echo, right in the middle of the stroke
+  for (let i = 7; i <= 12; i++) ev('pointermove', 200 + i * 6, 640 + i, { id: 811 });
+  ev('pointerup', 272, 652, { id: 811 });
+  await wait(150);
+  R.echoPressDoesNotSplitStroke = (await nowPage()).strokes.length === s2 + 1;
   // Renaming: a redraw of the sidebar (queued by any change) must not delete the box being typed
   // in — that closed the on-screen keyboard. Open the rename box, cause a change, wait, type.
   document.querySelector('.row.page [aria-label="Page options"]').click();
@@ -559,6 +569,23 @@ async function suite() {
   document.querySelector('[aria-label="Delete code block"]').click();
   await wait(200);
   R.codeBlockDeletes = !document.querySelector('.codeblock');
+  // Code blocks are part of undo: undo brings the deleted block back (with its code), a second
+  // undo takes the typing back to the starter code, a third removes the block; redo replays.
+  const blockCode = () => document.querySelector('.codeblock .code-src')?.value;
+  btn('Undo').click();
+  await wait(200);
+  R.codeUndoRestoresDeleted = blockCode() === 'print(6 * 7)';
+  btn('Undo').click();
+  await wait(200);
+  R.codeUndoRevertsTyping = !!document.querySelector('.codeblock') && blockCode() !== 'print(6 * 7)';
+  btn('Undo').click();
+  await wait(200);
+  R.codeUndoRemovesAdd = !document.querySelector('.codeblock');
+  btn('Redo').click();
+  btn('Redo').click();
+  btn('Redo').click();
+  await wait(200);
+  R.codeRedoReplays = !document.querySelector('.codeblock');
   // Pen calibration: run every step with synthetic pen/touch input, apply, and share the report.
   btn('Pen feel and palm settings').click();
   await wait(100);

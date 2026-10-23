@@ -140,7 +140,8 @@ function panel(): HTMLElement {
     | 'inkTrail'
     | 'hoverPreview'
     | 'tapGestures'
-    | 'ocrOnline';
+    | 'ocrOnline'
+    | 'stylusTouchCancel';
   const toggle = (key: BoolKey, label: string) => {
     const box = h('input', {
       type: 'checkbox',
@@ -166,6 +167,10 @@ function panel(): HTMLElement {
       'Convert to text: read handwriting online (Cloudflare AI, more accurate; sends a picture of the selected ink)',
     ),
     toggle('tapGestures', 'Two-finger tap undo, three-finger tap redo'),
+    toggle(
+      'stylusTouchCancel',
+      'iPad: keep Scribble from interfering with the Pencil (turn on only if the next letter is slow to write)',
+    ),
   ];
   /** A labelled row of choices for one setting. */
   const choice = <K extends 'sideButton' | 'eraserEnd' | 'cursor'>(

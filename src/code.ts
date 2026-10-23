@@ -1,5 +1,6 @@
 import { GripVertical, Library, Play, X } from 'lucide';
 import { capture, h, icon, toast, togglePopover } from './dom';
+import { commitSnapshot, snapshot } from './ink';
 import { type CodeBlock, page, subscribe, uid, update } from './store';
 import { toWorld, view } from './viewport';
 
@@ -139,11 +140,28 @@ async function run(b: CodeBlock): Promise<string> {
 // --- Blocks on the page ---
 
 const codesOf = () => page().codes ?? [];
+/** Changes a block as an undo step (typing in one block keeps merging into the same step). */
 function change(id: string, patch: Partial<CodeBlock>) {
+  const key = 'code' in patch || 'stdin' in patch ? `code:${id}` : undefined;
+  commitSnapshot(
+    snapshot(),
+    {
+      strokes: page().strokes,
+      texts: page().texts,
+      codes: codesOf().map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    },
+    key,
+  );
+}
+/** A change that isn't an edit and stays out of the undo history: a run's output, the compiler
+ * picked automatically for a new block. */
+function quiet(id: string, patch: Partial<CodeBlock>) {
   update(() => {
     page().codes = codesOf().map((c) => (c.id === id ? { ...c, ...patch } : c));
   });
 }
+const setCodes = (codes: CodeBlock[]) =>
+  commitSnapshot(snapshot(), { strokes: page().strokes, texts: page().texts, codes });
 
 /** Insert → Code block: a new block in the middle of the screen. */
 export async function addCodeBlock() {
@@ -161,12 +179,10 @@ export async function addCodeBlock() {
     libs: [],
     output: '',
   };
-  update(() => {
-    page().codes = [...codesOf(), block];
-  });
+  setCodes([...codesOf(), block]);
   try {
     const best = (await compilersFor(lang))[0];
-    if (best) change(block.id, { compiler: best.id });
+    if (best) quiet(block.id, { compiler: best.id });
   } catch {
     toast('Compiler Explorer is unreachable: code blocks need the internet to run.', 4000);
   }
@@ -281,17 +297,13 @@ function makeBlock(b: CodeBlock) {
     });
     try {
       const best = (await compilersFor(lang.value))[0];
-      if (best) change(id, { compiler: best.id });
+      if (best) quiet(id, { compiler: best.id });
     } catch {
       toast('Compiler Explorer is unreachable.', 3000);
     }
   });
   compiler.addEventListener('change', () => change(id, { compiler: compiler.value }));
-  del.addEventListener('click', () =>
-    update(() => {
-      page().codes = codesOf().filter((c) => c.id !== id);
-    }),
-  );
+  del.addEventListener('click', () => setCodes(codesOf().filter((c) => c.id !== id)));
   runBtn.addEventListener('click', async () => {
     const b2 = cur();
     if (!b2) return;
@@ -316,7 +328,7 @@ function makeBlock(b: CodeBlock) {
       result = `✗ ${(e as Error).message}. Code blocks need the internet to run.`;
     }
     runBtn.disabled = false;
-    change(id, { output: result });
+    quiet(id, { output: result });
   });
   libs.addEventListener('click', () => togglePopover(libs, libraryPanel(id)));
   grip.addEventListener('pointerdown', (e) => {

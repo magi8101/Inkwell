@@ -2,6 +2,7 @@ import { capture, h } from './dom';
 import { predict, type Sample } from './predict';
 import { densify, recognize } from './shape';
 import {
+  type CodeBlock,
   type ImageItem,
   inkTool,
   page,
@@ -132,12 +133,19 @@ export interface Snapshot {
   texts: TextBox[];
   /** Omitted by edits that don't touch pictures: they stay as they are. */
   images?: ImageItem[];
+  /** Same for code blocks. */
+  codes?: CodeBlock[];
 }
 /** One edit: the page content just before and just after it. */
 interface Step {
   before: Snapshot;
   after: Snapshot;
+  /** Edits with the same key close together (typing in one code block) are one step. */
+  key?: string;
+  at?: number;
 }
+/** A page without code blocks: one shared array, so "no code blocks" always compares equal. */
+export const NO_CODES: CodeBlock[] = [];
 const history = new Map<string, { undo: Step[]; redo: Step[] }>();
 function stacks() {
   let h = history.get(page().id);
@@ -156,6 +164,7 @@ export const snapshot = (): Snapshot => ({
   strokes: page().strokes,
   texts: page().texts,
   images: page().images,
+  codes: page().codes ?? NO_CODES,
 });
 
 function restore(s: Snapshot) {
@@ -163,6 +172,7 @@ function restore(s: Snapshot) {
     page().strokes = s.strokes;
     page().texts = s.texts;
     if (s.images) page().images = s.images;
+    if (s.codes) page().codes = s.codes;
   });
 }
 
@@ -194,24 +204,34 @@ function apply(from: Snapshot, to: Snapshot) {
     strokes: rebase(cur.strokes, from.strokes, to.strokes),
     texts: rebase(cur.texts, from.texts, to.texts),
     images: rebase(cur.images ?? [], from.images ?? [], to.images ?? []),
+    codes: rebase(cur.codes ?? NO_CODES, from.codes ?? NO_CODES, to.codes ?? NO_CODES),
   });
 }
 
 /** Records `before` for undo and makes `after` the page content. */
-export function commitSnapshot(before: Snapshot, after: Snapshot) {
+export function commitSnapshot(before: Snapshot, after: Snapshot, key?: string) {
   if (
     before.strokes === after.strokes &&
     before.texts === after.texts &&
-    (after.images === undefined || before.images === after.images)
+    (after.images === undefined || before.images === after.images) &&
+    (after.codes === undefined || before.codes === after.codes)
   ) {
     return;
   }
   const h = stacks();
   const images = before.images ?? page().images;
-  h.undo.push({
-    before: { ...before, images },
-    after: { ...after, images: after.images ?? images },
-  });
+  const codes = before.codes ?? page().codes ?? NO_CODES;
+  const step: Step = {
+    before: { ...before, images, codes },
+    after: { ...after, images: after.images ?? images, codes: after.codes ?? codes },
+    key,
+    at: performance.now(),
+  };
+  const last = h.undo.at(-1);
+  if (key && last?.key === key && step.at! - (last.at ?? 0) < 2000 && h.redo.length === 0) {
+    last.after = step.after; // typing on: still one step
+    last.at = step.at;
+  } else h.undo.push(step);
   if (h.undo.length > MAX_HISTORY) h.undo.shift();
   h.redo = [];
   restore(after);
@@ -242,6 +262,8 @@ interface Gesture {
   id: number;
   /** pointerType that started it ('pen', 'touch', 'mouse'). */
   type: string;
+  /** When it last received a sample (performance.now()). */
+  lastAt: number;
   mode: Mode;
   tool: Stroke['tool'];
   color: string;
@@ -435,7 +457,10 @@ function eraseAt(a: Gesture, x: number, y: number, r: number): boolean {
   return true;
 }
 
+const STALE_MS = 250;
+
 function addPoints(a: Gesture, e: PointerEvent) {
+  a.lastAt = performance.now();
   if (a.shape) return; // snapped: the clean shape stays until the pen lifts
   if (a.barrel && !a.barrel.armed) {
     if (Math.hypot(e.clientX - a.barrel.x, e.clientY - a.barrel.y) < BARREL_SLOP_PX) return;
@@ -718,9 +743,16 @@ function whyNot(e: PointerEvent) {
 
 bg.addEventListener('pointerdown', (e) => {
   if (active) {
-    // A pen writes one stroke at a time, so a new pen press means the last one's lift never
-    // arrived (it is how a stroke can get stuck "active" and swallow every press after it).
-    if (e.pointerType === 'pen' && active.type === 'pen') finish(true);
+    // A pen writes one stroke at a time, so a new pen press while the "active" stroke has gone
+    // quiet means its lift never arrived (it is how a stroke can get stuck and swallow every press
+    // after it): end it and take this press. A press that arrives while the stroke is still being
+    // written is an echo and is ignored; it must not cut the stroke in two.
+    if (
+      e.pointerType === 'pen' &&
+      active.type === 'pen' &&
+      performance.now() - active.lastAt > STALE_MS
+    )
+      finish(true);
     else {
       logPress(e, false, 'a stroke was still active');
       return;
@@ -737,6 +769,7 @@ bg.addEventListener('pointerdown', (e) => {
   active = {
     id: e.pointerId,
     type: e.pointerType,
+    lastAt: performance.now(),
     mode,
     tool,
     ...state.styles[tool],
@@ -787,11 +820,13 @@ bg.addEventListener('pointercancel', (e) => {
 // seconds later"; WebKit bug 217430). Cancelling the Pencil's touch events stops that, and the
 // pointer events that draw still arrive. Pencil touches only (iOS Safari marks them with
 // touchType 'stylus'), so fingers still pan and pinch; on the canvas only, so the Pencil can
-// still press buttons and type in text boxes.
+// still press buttons and type in text boxes. Pen feel → "iPad: keep Scribble from interfering";
+// off by default (it arrived together with lines breaking up into beads on one iPad).
 for (const type of ['touchstart', 'touchmove'] as const) {
   bg.addEventListener(
     type,
     (e) => {
+      if (!state.tuning.stylusTouchCancel) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         if ((e.changedTouches[i] as Touch & { touchType?: string }).touchType === 'stylus') {
           e.preventDefault();

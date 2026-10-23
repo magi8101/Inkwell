@@ -88,6 +88,8 @@ button:disabled {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  /* The corner controls lay out by the drawing area's width (the sidebar takes part of the screen). */
+  container: stage / inline-size;
 }
 
 #wet,
@@ -343,6 +345,10 @@ button:disabled {
 .popover {
   position: fixed;
   z-index: 60;
+  /* Taller than the screen (Pen feel on a phone held sideways): scroll inside, never off-screen. */
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px;
   border-radius: var(--radius);
   animation: pop-in 140ms var(--ease);
@@ -1587,6 +1593,31 @@ button.twisty:hover {
 
   .page-no {
     min-width: 40px;
+  }
+}
+
+/* A narrow drawing area (phones, or a tablet with the sidebar open): the page counter sits above
+   the sidebar button so the corner buttons have the bottom row; if they still don't fit (very
+   small phones) they scroll sideways. */
+@container stage (max-width: 600px) {
+  .pager {
+    left: 12px;
+    bottom: 68px;
+  }
+
+  .pill:not(.pager) {
+    max-width: calc(100cqw - 136px);
+    overflow-x: auto;
+    scrollbar-width: none;
+    touch-action: pan-x;
+  }
+
+  .pill:not(.pager) > * {
+    flex-shrink: 0;
+  }
+
+  .pill .tb-btn {
+    width: 34px;
   }
 }
 

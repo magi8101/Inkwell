@@ -73,6 +73,10 @@ const ALGORITHMS: [string, string][] = [
     'Typed notes edited with Tiptap: Markdown shortcuts turn into formatting as you type, and the note is saved back as plain Markdown (read and written with marked), so .md files open and save unchanged.',
   ],
   [
+    'Share links',
+    'A page is compressed (gzip) and encrypted in your browser with AES-256-GCM. The server stores only the encrypted bytes; the key is in the link after the #, which browsers never send. Links are deleted after 30 days.',
+  ],
+  [
     'Updates',
     'Installers are signed with Inkwell’s key. The app checks the newest release and only installs a download whose signature matches.',
   ],

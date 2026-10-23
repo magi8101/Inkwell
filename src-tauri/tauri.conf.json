@@ -39,5 +39,8 @@
       "icons/icon.ico"
     ],
     "windows": { "nsis": { "installMode": "currentUser" } }
+  },
+  "plugins": {
+    "updater": { "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2NUM4NDUwNUY1OTU2M0QKUldROVZsbGZVSVJjVmlsb0JQV0t2UUc0WUg4K2FaaDBFRWxVTlhCNXYzL1M1QU1RdGIzN3RkMVUK" }
   }
 }

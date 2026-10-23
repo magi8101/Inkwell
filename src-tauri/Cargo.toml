@@ -12,6 +12,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 percent-encoding = "2"
+# Tauri's generated config code needs it once tauri.conf.json has a "plugins" section.
+serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 

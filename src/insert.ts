@@ -1,4 +1,21 @@
-import { ClipboardPaste, Code, FileText, FileType, ImagePlus, Images, NotebookText } from 'lucide';
+import {
+  ClipboardPaste,
+  Code,
+  FileArchive,
+  FileText,
+  FileType,
+  FolderOpen,
+  ImagePlus,
+  Images,
+  NotebookText,
+} from 'lucide';
+import {
+  offerBundle,
+  readDirHandle,
+  readPickedFolder,
+  readZip,
+  takeDroppedBundles,
+} from './bundle';
 import { addCodeBlock } from './code';
 import { h, icon, openMenu, toast } from './dom';
 import { storePicture } from './images';
@@ -63,6 +80,33 @@ oneInput.addEventListener('change', async () => {
   oneInput.value = '';
 });
 const isOneNote = (f: File) => /\.one$/i.test(f.name);
+const zipInput = h('input', { type: 'file', accept: '.zip,application/zip', hidden: true });
+const folderInput = h('input', { type: 'file', webkitdirectory: true, hidden: true });
+document.body.append(zipInput, folderInput);
+zipInput.addEventListener('change', async () => {
+  const f = zipInput.files?.[0];
+  zipInput.value = '';
+  if (f)
+    await readZip(f).then(offerBundle, () => toast(`Couldn’t open “${f.name}” as a zip.`, 4000));
+});
+folderInput.addEventListener('change', () => {
+  const b = readPickedFolder([...(folderInput.files ?? [])]);
+  folderInput.value = '';
+  offerBundle(b);
+});
+type DirPicker = (o: { id: string; mode: 'read' }) => Promise<Parameters<typeof readDirHandle>[0]>;
+/** Chrome/Edge/Brave pick a folder they can read again (live updates); others take a copy. */
+async function pickFolder() {
+  const picker = (window as unknown as { showDirectoryPicker?: DirPicker }).showDirectoryPicker;
+  if (!picker) return folderInput.click();
+  try {
+    const dir = await picker({ id: 'inkwell-open', mode: 'read' });
+    offerBundle({ name: dir.name, entries: await readDirHandle(dir), dir });
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError')
+      toast(`Couldn’t read that folder: ${(e as Error).message}`, 5000);
+  }
+}
 const mdInput = h('input', {
   type: 'file',
   accept: '.md,.markdown,text/markdown',
@@ -123,6 +167,16 @@ insertButton.addEventListener('click', () =>
     'sep',
     { label: 'PDF (to write on)…', icon: FileText, run: () => pdfInput.click() },
     { label: 'Markdown file (.md)…', icon: FileType, run: () => mdInput.click() },
+    { label: 'Zip file (notes, PDFs, pictures)…', icon: FileArchive, run: () => zipInput.click() },
+    ...(/Android/.test(navigator.userAgent)
+      ? []
+      : [
+          {
+            label: 'Folder (notes, PDFs, pictures)…',
+            icon: FolderOpen,
+            run: () => void pickFolder(),
+          },
+        ]),
     { label: 'Code block (runs on Compiler Explorer)', icon: Code, run: () => void addCodeBlock() },
     { label: 'OneNote section (.one)…', icon: NotebookText, run: () => oneInput.click() },
   ]),
@@ -136,9 +190,20 @@ stage.addEventListener('dragover', (e) => {
   }
 });
 stage.addEventListener('drop', (e) => {
-  const files = [...(e.dataTransfer?.files ?? [])];
-  if (!files.length) return;
+  const dt = e.dataTransfer;
+  if (!dt) return;
+  // Folders and zips are listed and offered for import or viewing; taken now, while readable.
+  const bundles = takeDroppedBundles(dt);
+  const files = [...dt.items]
+    .filter((i) => i.kind === 'file' && !i.webkitGetAsEntry?.()?.isDirectory)
+    .map((i) => i.getAsFile())
+    .filter((f): f is File => !!f && !/\.zip$/i.test(f.name));
+  if (!files.length && !bundles) return;
   e.preventDefault();
+  for (const b of bundles ?? [])
+    b.then(offerBundle, (err) =>
+      toast(`Couldn’t read that: ${(err as Error).message ?? err}`, 5000),
+    );
   void (async () => {
     for (const f of files.filter(isOneNote)) await importOneNote(f);
     for (const f of files.filter(isPdf)) await importPdf(f);

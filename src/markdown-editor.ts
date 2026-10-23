@@ -11,10 +11,12 @@ export function createEditor(
   el: HTMLElement,
   md: string,
   on: { onUpdate: () => void; onSelection: () => void },
+  editable = true,
 ): Editor {
   el.replaceChildren();
   return new Editor({
     element: el,
+    editable,
     extensions: [
       StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
       TaskList,

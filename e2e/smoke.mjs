@@ -344,6 +344,20 @@ async function suite() {
     st2.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === st2.pageId)?.paper === undefined;
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await wait(100);
+  // Reported on iPad: after one stroke the next one only worked 1–2 seconds later. A pen whose lift
+  // was never delivered must not block the next press: the new press ends the old stroke and draws.
+  const nowPage = async () => {
+    const s = await stored();
+    return s.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === s.pageId);
+  };
+  const strokesBefore = (await nowPage()).strokes.length;
+  ev('pointerdown', 200, 700, { id: 801 });
+  for (let i = 1; i <= 8; i++) ev('pointermove', 200 + i * 6, 700 + i, { id: 801 });
+  ev('pointerdown', 320, 700, { id: 802 }); // no pointerup for 801
+  for (let i = 1; i <= 8; i++) ev('pointermove', 320 + i * 6, 700 + i, { id: 802 });
+  ev('pointerup', 372, 708, { id: 802 });
+  await wait(150);
+  R.lostLiftDoesNotBlockNextStroke = (await nowPage()).strokes.length === strokesBefore + 2;
   // Renaming: a redraw of the sidebar (queued by any change) must not delete the box being typed
   // in — that closed the on-screen keyboard. Open the rename box, cause a change, wait, type.
   document.querySelector('.row.page [aria-label="Page options"]').click();

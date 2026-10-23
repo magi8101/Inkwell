@@ -10,7 +10,7 @@ import {
   smoothingFromStill,
 } from './calibration';
 import { capture, h, IS_MAC, icon, toast } from './dom';
-import { inkStats, inkTrailAvailable, lowLatencyCanvas } from './ink';
+import { inkStats, inkTrailAvailable, lowLatencyCanvas, pressLog } from './ink';
 import { type Tuning, update } from './store';
 
 // "Calibrate my pen": a guided series of tasks with the user's own stylus. Each step measures
@@ -267,6 +267,14 @@ function reportText(m: Measurements, r: Result, applied: boolean): string {
     'RAW INPUT (what the browser delivered during calibration)',
     `  ${[...m.raw].map(([k, n]) => `${k} ×${n}`).join(', ') || 'nothing'}`,
     `  buttons values: ${[...m.rawButtons].sort((a, b) => a - b).join(', ') || 'none'}; largest touch contact: ${Math.round(m.rawMaxContact)} px; pointerrawupdate: ${'onpointerrawupdate' in window ? 'yes' : 'no'}`,
+    '',
+    'RECENT PRESSES ON THE PAGE (oldest first; write a few letters before running this)',
+    ...(pressLog.length
+      ? pressLog.map(
+          (p) =>
+            `  ${p.type} ${p.took ? 'started a stroke' : `ignored: ${p.why}`}${p.sinceLift >= 0 ? `, ${p.sinceLift} ms after the last lift` : ''}`,
+        )
+      : ['  none yet']),
     '',
     'DELAY (stylus → screen)',
     `  Pen-down → frame on screen (measured): ${Number.isFinite(l.toFrame) ? `${round1(l.toFrame)} ms` : 'n/a'}`,

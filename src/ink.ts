@@ -240,6 +240,8 @@ export function redo() {
 type Mode = 'ink' | 'erase' | 'cut' | 'line';
 interface Gesture {
   id: number;
+  /** pointerType that started it ('pen', 'touch', 'mouse'). */
+  type: string;
   mode: Mode;
   tool: Stroke['tool'];
   color: string;
@@ -683,14 +685,58 @@ function finish(keep: boolean) {
   });
 }
 
+/** The newest presses and what became of each, for the pen report (Pen feel → Calibrate). */
+export const pressLog: {
+  at: number;
+  type: string;
+  buttons: number;
+  took: boolean;
+  why: string;
+  sinceLift: number;
+}[] = [];
+let lastLift = 0;
+function logPress(e: PointerEvent, took: boolean, why = '') {
+  pressLog.push({
+    at: Math.round(e.timeStamp),
+    type: e.pointerType,
+    buttons: e.buttons,
+    took,
+    why,
+    sinceLift: lastLift ? Math.round(e.timeStamp - lastLift) : -1,
+  });
+  if (pressLog.length > 40) pressLog.shift();
+}
+/** Why modeFor said no, in words (it only has to be right enough to read a report). */
+function whyNot(e: PointerEvent) {
+  if (e.pointerType === 'touch') {
+    if (penSeen) return 'touch while a pen is in use';
+    if (isPalm(e)) return 'looks like a palm';
+    if (touchCount() !== 1) return `${touchCount()} touches (pan/zoom)`;
+  }
+  return e.button !== 0 ? `button ${e.button}` : 'this tool does not draw';
+}
+
 bg.addEventListener('pointerdown', (e) => {
-  if (active) return;
+  if (active) {
+    // A pen writes one stroke at a time, so a new pen press means the last one's lift never
+    // arrived (it is how a stroke can get stuck "active" and swallow every press after it).
+    if (e.pointerType === 'pen' && active.type === 'pen') finish(true);
+    else {
+      logPress(e, false, 'a stroke was still active');
+      return;
+    }
+  }
   const mode = modeFor(e);
-  if (!mode) return;
+  if (!mode) {
+    logPress(e, false, whyNot(e));
+    return;
+  }
+  logPress(e, true);
   capture(bg, e.pointerId);
   const tool = inkTool(state.tool);
   active = {
     id: e.pointerId,
+    type: e.pointerType,
     mode,
     tool,
     ...state.styles[tool],
@@ -728,11 +774,35 @@ if (RAW_EVENTS) {
   });
 }
 bg.addEventListener('pointerup', (e) => {
+  lastLift = e.timeStamp;
   if (active?.id === e.pointerId) finish(true);
 });
 bg.addEventListener('pointercancel', (e) => {
+  lastLift = e.timeStamp;
+  logPress(e, false, 'pointercancel: the system took this touch');
   if (active?.id === e.pointerId) finish(false);
 });
+// iPad Safari: Scribble (Apple Pencil handwriting) takes Pencil touches that start on the page and
+// can drop or delay the pointer events of the stroke after one ("the next letter only works 1-2
+// seconds later"; WebKit bug 217430). Cancelling the Pencil's touch events stops that, and the
+// pointer events that draw still arrive. Pencil touches only (iOS Safari marks them with
+// touchType 'stylus'), so fingers still pan and pinch; on the canvas only, so the Pencil can
+// still press buttons and type in text boxes.
+for (const type of ['touchstart', 'touchmove'] as const) {
+  bg.addEventListener(
+    type,
+    (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if ((e.changedTouches[i] as Touch & { touchType?: string }).touchType === 'stylus') {
+          e.preventDefault();
+          return;
+        }
+      }
+    },
+    { passive: false },
+  );
+}
+
 // A second finger means the user wants to pan, not draw.
 bg.addEventListener('panstart', () => {
   if (active) finish(false);

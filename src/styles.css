@@ -99,6 +99,13 @@ button:disabled {
   pointer-events: none;
 }
 
+/* iPad: no text-selection or callout magnifier when the Pencil or a finger rests on the page. */
+#bg {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 #bg,
 #wet,
 #live,

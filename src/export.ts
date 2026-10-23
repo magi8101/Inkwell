@@ -2,7 +2,7 @@ import { FileDown } from 'lucide';
 import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
 import { h, icon, toast, togglePopover } from './dom';
 import { bitmap, blobOf, imageBox, loadAll } from './images';
-import { codeAsText, notebook, type Page, page } from './store';
+import { codeAsText, notebook, type Page, page, sheetOf } from './store';
 import { bbox, type FONTS, fontCss, inkColor, LINE_HEIGHT, svgPath, wrapLines } from './stroke';
 import { drawPage, isDark, pageColor } from './viewport';
 
@@ -201,11 +201,17 @@ async function exportPdf(
 
   for (const [index, raw] of pages.entries()) {
     const p = withCode(raw);
-    const b = contentBox(p);
+    const sheet = sheetOf(p);
+    // A sheet of paper prints as itself, at its real size; anything beyond its edges is cut off.
+    const b = sheet ? { x: 0, y: 0, w: sheet[0], h: sheet[1] } : contentBox(p);
     let pageW: number;
     let pageH: number;
     let scale: number;
-    if (size === 'fit') {
+    if (sheet) {
+      scale = PT_PER_PX;
+      pageW = sheet[0] * scale;
+      pageH = sheet[1] * scale;
+    } else if (size === 'fit') {
       scale = PT_PER_PX;
       pageW = b.w * scale + MARGIN_PT * 2;
       pageH = b.h * scale + MARGIN_PT * 2;
@@ -464,6 +470,7 @@ function panel(): HTMLElement {
     list,
     h('div', { class: 'panel-sub' }, 'Page size'),
     sz.el,
+    h('p', { class: 'export-note' }, 'Pages set to A4, A3 or Letter export at their own size.'),
     h('label', { class: 'check' }, numbersBox, h('span', {}, 'Page numbers')),
   );
   const go = h('button', { class: 'primary', onclick: run }, 'Export');

@@ -1142,6 +1142,14 @@ button.primary:disabled {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.segmented.two {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.segmented[hidden] {
+  display: none;
+}
+
 .tune-panel {
   max-height: calc(100vh - 120px);
   overflow-y: auto;
@@ -2139,4 +2147,10 @@ body.md-page #zoom {
 
 .pen-save[hidden] {
   display: none;
+}
+
+.export-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12px;
 }

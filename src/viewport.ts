@@ -1,10 +1,12 @@
 import { Locate, Lock, LockOpen, Maximize, RotateCcw, Scan, ZoomIn, ZoomOut } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
 import { drawImages, imageBox, onImageLoaded } from './images';
-import { type Background, type Page, page, state, subscribe, update } from './store';
+import { type Background, type Page, page, sheetOf, state, subscribe, update } from './store';
 import { bbox as bboxOf, drawStroke, drawTextBox, setRenderTuning } from './stroke';
 
 const GRID = 32;
+/** Room left around content (or a sheet of paper) when fitting it to the screen. */
+const FIT_PAD = 56;
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 8;
 
@@ -131,7 +133,26 @@ export function drawPage(
   withText = true,
 ) {
   const color = pageColor(p.pageColor);
-  drawBackground(c, w, h, p.background, color, v, px);
+  const sheet = sheetOf(p);
+  if (sheet) {
+    // A sheet of paper on a desk: the colour and pattern stay on the sheet.
+    c.fillStyle = isDark(color) ? '#3a3a40' : '#d4d4d8';
+    c.fillRect(0, 0, w, h);
+    c.save();
+    c.setTransform(...viewMatrix(1, v));
+    c.beginPath();
+    c.rect(0, 0, sheet[0], sheet[1]);
+    c.shadowColor = 'rgba(0, 0, 0, 0.25)';
+    c.shadowBlur = 12 * px;
+    c.shadowOffsetY = 2 * px;
+    c.fillStyle = color;
+    c.fill();
+    c.shadowColor = 'transparent';
+    c.clip();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    drawBackground(c, w, h, p.background, color, v, px);
+    c.restore();
+  } else drawBackground(c, w, h, p.background, color, v, px);
   c.save();
   c.setTransform(...viewMatrix(1, v));
   const dark = isDark(color);
@@ -208,6 +229,13 @@ export function resetView() {
   view.y = 0;
   view.scale = 1;
   view.angle = 0;
+  // A sheet of paper opens fitted across the screen (never above 100%), from its top.
+  const sheet = sheetOf(page());
+  if (sheet && rect.width) {
+    view.scale = Math.max(MIN_ZOOM, Math.min(1, (rect.width - FIT_PAD * 2) / sheet[0]));
+    view.x = (rect.width - sheet[0] * view.scale) / 2;
+    view.y = FIT_PAD + 24;
+  }
   redraw();
 }
 
@@ -271,11 +299,20 @@ function contentBox(p: Page): number[] | null {
   return b;
 }
 
-const FIT_PAD = 56;
 const FIT_MAX_ZOOM = 2;
 
 export function fitContent() {
-  const b = contentBox(page());
+  // On paper, "fit" means the whole sheet (and anything drawn beyond its edges).
+  const sheet = sheetOf(page());
+  const ink = contentBox(page());
+  const b = sheet
+    ? [
+        Math.min(0, ink?.[0] ?? 0),
+        Math.min(0, ink?.[1] ?? 0),
+        Math.max(sheet[0], ink?.[2] ?? 0),
+        Math.max(sheet[1], ink?.[3] ?? 0),
+      ]
+    : ink;
   if (!b) {
     animateTo({ x: 0, y: 0, scale: 1 });
     return;

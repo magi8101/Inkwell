@@ -171,6 +171,9 @@ const renameSection = (s: Section) =>
 export function addPage() {
   update((s) => {
     const p = newPage();
+    // A new page comes on the same paper as the one it follows (like a notebook's pages).
+    const { paper, landscape } = page();
+    if (paper) Object.assign(p, { paper, landscape });
     const pages = section().pages;
     pages.splice(pages.indexOf(page()) + 1, 0, p);
     s.pageId = p.id;

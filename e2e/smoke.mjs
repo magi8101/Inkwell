@@ -325,6 +325,25 @@ async function suite() {
   R.addPenAddsOne = favs1.length === favs0.length + 1;
   R.newPenGetsColour = favs1.at(-1).color === '#e5484d';
   R.defaultPenUnchanged = favs1[0].color === favs0[0].color;
+  // Paper sizes: A4 landscape on this page; the next page comes on the same paper; back to infinite.
+  btn('Page style').click();
+  await wait(100);
+  const seg = (label) => [...document.querySelectorAll('.style-panel .seg')].find((b) => b.textContent.trim() === label);
+  seg('A4').click();
+  seg('Landscape').click();
+  const st = await stored();
+  const onPaper = st.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === st.pageId);
+  R.paperSizeSet = onPaper.paper === 'a4' && onPaper.landscape === true;
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await wait(100);
+  btn('Page style').click();
+  await wait(100);
+  seg('Infinite').click();
+  const st2 = await stored();
+  R.paperInfiniteAgain =
+    st2.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === st2.pageId)?.paper === undefined;
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await wait(100);
   // Reported: pick pen 1, open the colour changer, pick a colour → pen 1 changed too. Now only the
   // current pen changes, and the panel offers to keep it as a new pen or update pen 1.
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); // closes the "new pen" panel

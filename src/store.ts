@@ -103,7 +103,25 @@ export interface Page {
   background: Background;
   /** Hex, or 'auto' to follow the theme. */
   pageColor: string;
+  /** A sheet of paper (top-left at 0, 0); absent for an infinite canvas. */
+  paper?: Paper;
+  landscape?: boolean;
 }
+export type Paper = 'a4' | 'a3' | 'letter';
+const MM = 96 / 25.4; // world px per millimetre
+/** Paper sizes in world px (CSS px, 96 per inch), portrait; exact, so PDFs come out standard. */
+export const PAPER: Record<Paper, [number, number]> = {
+  a4: [210 * MM, 297 * MM],
+  a3: [297 * MM, 420 * MM],
+  letter: [816, 1056], // 8.5 × 11 in
+};
+/** The page's sheet as [width, height] in world px, or null on an infinite canvas. */
+export function sheetOf(p: Page): [number, number] | null {
+  if (!p.paper || !PAPER[p.paper]) return null;
+  const [w, h] = PAPER[p.paper];
+  return p.landscape ? [h, w] : [w, h];
+}
+
 /** A folder of pages. Folders nest (Obsidian-style) through `parent`; the list stays flat. */
 export interface Section {
   id: string;

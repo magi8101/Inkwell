@@ -13,6 +13,7 @@ import {
   type Background,
   editStyle,
   onSaveError,
+  type Paper,
   page,
   state,
   subscribe,
@@ -26,7 +27,7 @@ import './markdown';
 import './update';
 import { setTool } from './toolbar';
 import { openTuning, tuneButton } from './tune';
-import { actualSize, fitContent, penNear, zoomBy } from './viewport';
+import { actualSize, fitContent, penNear, resetView, zoomBy } from './viewport';
 
 // --- Corner controls: page style and theme ---
 const BACKGROUNDS: { id: Background; label: string; icon: typeof Square }[] = [
@@ -42,6 +43,12 @@ const PAGE_COLORS = [
   { c: '#eef3f8', label: 'Mist' },
   { c: '#26272b', label: 'Slate' },
   { c: '#101012', label: 'Black' },
+];
+const SIZES: { id: Paper | 'infinite'; label: string }[] = [
+  { id: 'infinite', label: 'Infinite' },
+  { id: 'a4', label: 'A4' },
+  { id: 'a3', label: 'A3' },
+  { id: 'letter', label: 'Letter' },
 ];
 const THEMES = { system: SunMoon, light: Sun, dark: Moon } as const;
 const NEXT_THEME = { system: 'light', light: 'dark', dark: 'system' } as const;
@@ -75,7 +82,47 @@ function pagePanel(): HTMLElement {
         }),
     }),
   );
+  // Paper: an infinite canvas, or a sheet of a real size (exported to PDF at that size).
+  const sizeButtons = SIZES.map((z) =>
+    h(
+      'button',
+      {
+        class: 'seg',
+        onclick: () => {
+          update(() => {
+            const p = page();
+            if (z.id === 'infinite') delete p.paper;
+            else p.paper = z.id;
+          });
+          resetView(); // show the new sheet
+        },
+      },
+      h('span', {}, z.label),
+    ),
+  );
+  const turnButtons = (['portrait', 'landscape'] as const).map((o) =>
+    h(
+      'button',
+      {
+        class: 'seg',
+        onclick: () => {
+          update(() => {
+            page().landscape = o === 'landscape';
+          });
+          resetView();
+        },
+      },
+      h('span', {}, o === 'portrait' ? 'Portrait' : 'Landscape'),
+    ),
+  );
+  const turnRow = h('div', { class: 'segmented two' }, ...turnButtons);
   const refresh = () => {
+    const paper = page().paper ?? 'infinite';
+    for (const [i, z] of SIZES.entries())
+      sizeButtons[i]!.setAttribute('aria-pressed', String(paper === z.id));
+    turnRow.hidden = paper === 'infinite';
+    for (const [i, b] of turnButtons.entries())
+      b.setAttribute('aria-pressed', String(!!page().landscape === (i === 1)));
     for (const [i, b] of BACKGROUNDS.entries()) {
       bgButtons[i]!.setAttribute('aria-pressed', String(page().background === b.id));
     }
@@ -90,6 +137,9 @@ function pagePanel(): HTMLElement {
     h('div', { class: 'segmented' }, ...bgButtons),
     h('div', { class: 'panel-sub' }, 'Colour'),
     h('div', { class: 'palette page-colors' }, ...colorButtons),
+    h('div', { class: 'panel-sub' }, 'Size'),
+    h('div', { class: 'segmented' }, ...sizeButtons),
+    turnRow,
   );
   const unsub = subscribe(refresh);
   new MutationObserver((_, obs) => {

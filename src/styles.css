@@ -1723,6 +1723,7 @@ button.twisty:hover {
 }
 
 .code-src,
+.code-stdin,
 .code-out {
   margin: 0;
   padding: 10px 12px;
@@ -1744,6 +1745,39 @@ button.twisty:hover {
   color: var(--text);
   white-space: pre;
   overflow-x: auto;
+}
+
+/* The program's input (stdin), between the code and its output. */
+.code-stdin-row {
+  display: flex;
+  align-items: baseline;
+  border-top: 1px dashed var(--border);
+}
+
+.code-stdin-row[hidden] {
+  display: none;
+}
+
+.code-stdin-row > span {
+  padding-left: 12px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.code-stdin {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  background: var(--surface);
+  color: var(--text);
+  white-space: pre;
 }
 
 .code-out {

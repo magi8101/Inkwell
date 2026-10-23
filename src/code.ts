@@ -116,7 +116,7 @@ async function run(b: CodeBlock): Promise<string> {
       lang: b.lang,
       options: {
         userArguments: '',
-        executeParameters: { args: [], stdin: '' },
+        executeParameters: { args: [], stdin: b.stdin ?? '' },
         compilerOptions: { executorRequest: true },
         filters: { execute: true },
         tools: [],
@@ -177,6 +177,7 @@ const els = new Map<
   {
     root: HTMLElement;
     code: HTMLTextAreaElement;
+    stdin: HTMLTextAreaElement;
     out: HTMLElement;
     compiler: HTMLSelectElement;
     run: HTMLButtonElement;
@@ -220,12 +221,21 @@ function makeBlock(b: CodeBlock) {
     autocomplete: 'off',
     'aria-label': 'Code',
   });
+  const stdin = h('textarea', {
+    class: 'code-stdin',
+    rows: 1,
+    spellcheck: false,
+    autocapitalize: 'off',
+    placeholder: 'Input for the program — one line per input()',
+    'aria-label': 'Program input (stdin)',
+  });
   const out = h('pre', { class: 'code-out', 'aria-live': 'polite' });
   const root = h(
     'div',
     { class: 'codeblock', 'data-id': b.id },
     h('div', { class: 'code-head' }, grip, lang, compiler, libs, runBtn, del),
     code,
+    h('label', { class: 'code-stdin-row' }, h('span', {}, 'Input'), stdin),
     out,
   );
   // Typing, picking and tapping stay inside the block (no drawing, no app shortcuts).
@@ -246,6 +256,13 @@ function makeBlock(b: CodeBlock) {
       code.setRangeText('    ', code.selectionStart, code.selectionEnd, 'end');
       code.dispatchEvent(new Event('input'));
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runBtn.click();
+  });
+  stdin.addEventListener('input', () => {
+    fit(stdin);
+    change(id, { stdin: stdin.value });
+  });
+  stdin.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runBtn.click();
   });
   code.addEventListener('blur', () => {
@@ -287,7 +304,14 @@ function makeBlock(b: CodeBlock) {
     out.textContent = 'Running on Compiler Explorer…';
     let result: string;
     try {
-      result = await run({ ...b2, code: code.value });
+      result = await run({ ...b2, code: code.value, stdin: stdin.value });
+      // Ran out of input: say where it goes (the most common surprise with input()).
+      if (/EOFError|EOF when reading|NoSuchElementException/.test(result) && !stdin.value.trim()) {
+        stdin.dataset.asked = '1';
+        stdin.parentElement!.hidden = false;
+        result +=
+          '\n\nThe program asked for input. Type it in the Input box above (one line per input()), then Run again.';
+      }
     } catch (e) {
       result = `✗ ${(e as Error).message}. Code blocks need the internet to run.`;
     }
@@ -316,10 +340,14 @@ function makeBlock(b: CodeBlock) {
     grip.addEventListener('pointerup', up);
   });
   layer.append(root);
-  const el = { root, code, out, compiler, run: runBtn, libs, lang };
+  const el = { root, code, stdin, out, compiler, run: runBtn, libs, lang };
   els.set(id, el);
   return el;
 }
+
+/** Code that reads input: Python, C/C++, Java/Kotlin, C#, Go, Rust, TypeScript (Node). */
+const READS_INPUT =
+  /\binput\s*\(|\bcin\s*>>|\bscanf\s*\(|\bgetline\s*\(|\bgets\s*\(|\bScanner\b|readLine|ReadLine|read_line|stdin|fmt\.Scan|readline/;
 
 /** The textarea grows with its code, so the whole block is visible on the page. */
 function fit(t: HTMLTextAreaElement) {
@@ -417,6 +445,14 @@ export function renderCodes() {
     el.root.style.cssText = `left:${b.x}px;top:${b.y}px;width:${b.w}px`;
     if (document.activeElement !== el.code && el.code.value !== b.code) el.code.value = b.code;
     el.lang.value = b.lang;
+    if (document.activeElement !== el.stdin && el.stdin.value !== (b.stdin ?? ''))
+      el.stdin.value = b.stdin ?? '';
+    // Shown when the program reads input (or already has some), so blocks stay compact otherwise.
+    el.stdin.parentElement!.hidden = !(
+      b.stdin ||
+      READS_INPUT.test(b.code) ||
+      el.stdin.dataset.asked
+    );
     el.out.textContent = b.output;
     el.out.hidden = !b.output;
     el.libs.title = b.libs.length

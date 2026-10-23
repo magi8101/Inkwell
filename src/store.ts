@@ -74,6 +74,8 @@ export interface CodeBlock {
   libs: { id: string; version: string }[];
   /** The last run's output, kept with the note. */
   output: string;
+  /** What the program reads as input (stdin), one line per read; absent until typed. */
+  stdin?: string;
 }
 /** A code block as printable text (code, then its last output), for export. */
 export const codeAsText = (c: CodeBlock): TextBox => ({

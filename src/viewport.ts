@@ -531,7 +531,10 @@ canvas.addEventListener('pointermove', (e) => {
     for (const id of [...touches.keys()]) rejectTouch(id);
     return;
   }
-  if (tooBig(e)) {
+  // A fast-moving fingertip or stylus disc smears wider than it is. One touch that already passed
+  // the size check at landing (and is drawing) is only dropped mid-stroke when it grows far past
+  // the palm size, or a quick straight line would vanish halfway.
+  if (Math.max(e.width, e.height) > state.tuning.palmPx * (touches.size === 1 ? 1.8 : 1)) {
     rejectTouch(e.pointerId);
     return;
   }
@@ -567,8 +570,10 @@ const endPointer = (e: PointerEvent) => {
   palms.delete(e.pointerId);
   if (e.pointerType === 'mouse') mousePan = null;
 };
-canvas.addEventListener('pointerup', endPointer);
-canvas.addEventListener('pointercancel', endPointer);
+// On the window, in the capture phase: a finger that lifts over the toolbar or outside the window
+// must still be forgotten, or a stale entry makes every later touch look like a palm (no pinch).
+addEventListener('pointerup', endPointer, true);
+addEventListener('pointercancel', endPointer, true);
 
 // Wheel deltas come in pixels, lines (Firefox on Linux for mouse wheels) or pages; without
 // normalising, a Ctrl+wheel notch in Firefox zoomed ~3% and looked broken.

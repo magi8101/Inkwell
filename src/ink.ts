@@ -380,7 +380,14 @@ let tipBox: { x0: number; y0: number; x1: number; y1: number } | null = null;
  */
 function samplesOf(e: PointerEvent): { ev: PointerEvent; p: number }[] {
   const list = e.getCoalescedEvents?.() ?? [];
-  const evs = list.length ? [...list].sort((x, y) => x.timeStamp - y.timeStamp) : [e];
+  // Dispatch order is the spec's order. Only re-sort when every timestamp is real: Safari's
+  // incomplete coalesced events can carry 0 or repeated stamps, and sorting those scrambles the line.
+  const real = list.every((ev) => ev.timeStamp > 0);
+  const evs = list.length
+    ? real
+      ? [...list].sort((x, y) => x.timeStamp - y.timeStamp)
+      : [...list]
+    : [e];
   const fallback = e.pressure > 0 ? e.pressure : 0.5;
   return evs.map((ev) => ({ ev, p: ev.pressure > 0 ? ev.pressure : fallback }));
 }
@@ -394,7 +401,8 @@ function addRaw(a: Gesture, samples: { ev: PointerEvent; p: number }[]) {
     // Timestamps alone aren't unique: coarse timers can give two real samples the same time.
     if (
       last &&
-      (ev.timeStamp < last.t || (ev.timeStamp === last.t && x === last.x && y === last.y))
+      ((ev.timeStamp > 0 && ev.timeStamp < last.t) ||
+        (ev.timeStamp === last.t && x === last.x && y === last.y))
     ) {
       continue;
     }
@@ -755,7 +763,18 @@ function finish(keep: boolean) {
       const w = localToWorld(r.x, r.y);
       points.push(round(w.x), round(w.y), round(r.p));
     }
-    commit(a.before, [...a.before, { id: uid(), tool, color, width, opacity, pressure, points }]);
+    commit(a.before, [
+      ...a.before,
+      {
+        id: uid(),
+        tool,
+        color,
+        width,
+        opacity,
+        pressure,
+        points,
+      },
+    ]);
   } else {
     commitSnapshot(
       { strokes: a.before, texts: a.beforeTexts, shapes: a.beforeShapes },
@@ -875,7 +894,9 @@ bg.addEventListener('pointerup', (e) => {
 bg.addEventListener('pointercancel', (e) => {
   lastLift = e.timeStamp;
   logPress(e, false, 'pointercancel: the system took this touch');
-  if (active?.id === e.pointerId) finish(false);
+  // The system cancelling a Pencil or pen mid-line (Scribble, an edge gesture) must not wipe what
+  // was already written: keep it. A cancelled touch is a gesture or a palm: that is dropped.
+  if (active?.id === e.pointerId) finish(e.pointerType === 'pen' && active.points.length >= 9);
 });
 // iPad Safari: Scribble (Apple Pencil handwriting) takes Pencil touches that start on the page and
 // can drop or delay the pointer events of the stroke after one ("the next letter only works 1-2

@@ -1,5 +1,6 @@
 // A notebook kept in a folder on disk, Obsidian-style: each folder is a directory, each page a
-// `<title>.inkwell` file (JSON), pictures sit in `attachments/`. Pure logic, no DOM, so
+// `<title>.inkwell` file (JSON), each Markdown note a plain `<title>.md` (so an Obsidian vault's
+// notes open as Markdown notes, and edits save back as Markdown), pictures sit in `attachments/`. Pure logic, no DOM, so
 // vault.check.ts can run it against an in-memory folder.
 
 import type { Notebook, Page, Section } from './store.ts';
@@ -19,6 +20,7 @@ export interface Backend {
 export type Written = Record<string, { h: string; id?: string }>;
 
 const EXT = '.inkwell';
+const MD = /\.md$/i;
 const ATTACHMENTS = 'attachments/';
 
 /** A name that's valid on Windows, macOS and Linux. */
@@ -63,7 +65,8 @@ export function layout(nb: Notebook, types: ReadonlyMap<string, string>): Map<st
       out.set(dir, { kind: 'dir', sec });
       const names = new Set<string>();
       for (const page of sec.pages) {
-        out.set(`${dir}${unique(safe(page.title), names)}${EXT}`, { kind: 'page', page });
+        const ext = page.md === undefined ? EXT : '.md';
+        out.set(`${dir}${unique(safe(page.title), names)}${ext}`, { kind: 'page', page });
         for (const im of page.images) {
           out.set(`${ATTACHMENTS}${im.blob}.${extOf(types.get(im.blob) ?? '')}`, {
             kind: 'att',
@@ -108,7 +111,7 @@ export async function syncOut(
         written[path] = { h: 'att' };
       }
     } else {
-      const text = pageText(e.page);
+      const text = e.page.md ?? pageText(e.page);
       const h = hash(text);
       if (written[path]?.h !== h) {
         await disk.write(path, text);
@@ -152,10 +155,28 @@ export async function readDisk(
       plan.dirs.push(f);
       continue;
     }
-    if (!f.endsWith(EXT)) continue;
+    const isMd = MD.test(f);
+    if (!f.endsWith(EXT) && !isMd) continue;
     const text = await (await disk.read(f)).text();
     const h = hash(text);
     if (written[f]?.h === h) continue; // unchanged since the app wrote it
+    const slash = f.lastIndexOf('/');
+    const dir = slash < 0 ? 'Unsorted/' : f.slice(0, slash + 1);
+    if (isMd) {
+      // Plain Markdown: a note named after its file; it keeps its id while the path stays.
+      const page: Page = {
+        id: written[f]?.id ?? f,
+        title: f.slice(slash + 1, -3),
+        md: text,
+        strokes: [],
+        texts: [],
+        images: [],
+        background: 'blank',
+        pageColor: 'auto',
+      };
+      plan.pages.push({ path: f, dir, page, h });
+      continue;
+    }
     let page: Page;
     try {
       const { inkwell, ...rest } = JSON.parse(text);
@@ -164,7 +185,6 @@ export async function readDisk(
     } catch {
       continue; // not one of ours, or half-written by a sync client: try again next time
     }
-    const slash = f.lastIndexOf('/');
     page.id ||= `${f}`;
     page.title = f.slice(slash + 1, -EXT.length); // the file name is the title, as in Obsidian
     page.strokes ??= [];
@@ -173,7 +193,7 @@ export async function readDisk(
     page.background ??= 'blank';
     page.pageColor ??= 'auto';
     // Pages loose in the top of the folder go into an "Unsorted" folder.
-    plan.pages.push({ path: f, dir: slash < 0 ? 'Unsorted/' : f.slice(0, slash + 1), page, h });
+    plan.pages.push({ path: f, dir, page, h });
     for (const im of page.images) {
       if (await hasBlob(im.blob)) continue;
       const file = files.find((x) => x.startsWith(`${ATTACHMENTS}${im.blob}.`));

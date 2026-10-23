@@ -151,9 +151,33 @@ assert.deepEqual(
 );
 assert.deepEqual(school.pages[0]!.texts, []); // missing fields are filled in
 
-// Files that aren't Inkwell pages are ignored, never imported or deleted.
-files.set('School/notes.md', '# hi');
+// Files that aren't pages or notes are ignored, never imported or deleted.
+files.set('School/todo.txt', 'milk');
 await fromDisk();
 await syncOut(nb, disk, written, readBlob, types);
-assert.equal(files.get('School/notes.md'), '# hi');
+assert.equal(files.get('School/todo.txt'), 'milk');
+
+// A .md file (an Obsidian note) opens as a Markdown note and is left exactly as it was.
+files.set('School/notes.md', '# hi\n\n- [ ] a\n');
+await fromDisk();
+const note = nb.sections.find((s) => s.name === 'School')!.pages.find((p) => p.title === 'notes')!;
+assert.equal(note.md, '# hi\n\n- [ ] a\n');
+await syncOut(nb, disk, written, readBlob, types);
+assert.equal(files.get('School/notes.md'), '# hi\n\n- [ ] a\n');
+assert.ok(!files.has('School/notes.inkwell'));
+
+// Edited in the app → the .md file gets the new Markdown; edited on disk → the note follows.
+note.md = '# hi\n\n- [x] a\n';
+await syncOut(nb, disk, written, readBlob, types);
+assert.equal(files.get('School/notes.md'), '# hi\n\n- [x] a\n');
+files.set('School/notes.md', '# hi again\n');
+await fromDisk();
+const again = nb.sections.find((s) => s.name === 'School')!.pages.find((p) => p.title === 'notes')!;
+assert.equal(again.id, note.id); // same note, updated in place
+assert.equal(again.md, '# hi again\n');
+
+// A Markdown note made in the app is saved as plain Markdown, not as an .inkwell file.
+nb.sections.find((s) => s.name === 'School')!.pages.push(page('m1', 'Plan', { md: '# Plan\n' }));
+await syncOut(nb, disk, written, readBlob, types);
+assert.equal(files.get('School/Plan.md'), '# Plan\n');
 console.log('vault checks passed');

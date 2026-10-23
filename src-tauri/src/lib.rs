@@ -108,7 +108,10 @@ fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
 }
 
 fn own_file(rel: &str) -> Result<(), String> {
-    if Path::new(rel).extension().is_some_and(|e| e == "inkwell") || rel.starts_with("attachments/")
+    if Path::new(rel)
+        .extension()
+        .is_some_and(|e| e == "inkwell" || e.eq_ignore_ascii_case("md"))
+        || rel.starts_with("attachments/")
     {
         Ok(())
     } else {

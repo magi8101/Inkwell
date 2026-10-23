@@ -96,6 +96,8 @@ export interface Page {
   images: ImageItem[];
   /** Absent in notes from before code blocks existed. */
   codes?: CodeBlock[];
+  /** Markdown source: set only on Markdown notes (typed pages), which show an editor, not ink. */
+  md?: string;
   background: Background;
   /** Hex, or 'auto' to follow the theme. */
   pageColor: string;
@@ -226,6 +228,11 @@ export const newPage = (title = 'Untitled page'): Page => ({
   images: [],
   background: 'blank',
   pageColor: 'auto',
+});
+
+export const newMarkdownPage = (title = 'Untitled note', md = ''): Page => ({
+  ...newPage(title),
+  md,
 });
 
 export const newSection = (name: string, index = 0): Section => ({

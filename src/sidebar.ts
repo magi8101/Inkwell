@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   Ellipsis,
+  FileType,
   Folder,
   FolderDown,
   FolderInput,
@@ -23,6 +24,7 @@ import {
 } from 'lucide';
 import { capture, h, icon, openMenu } from './dom';
 import { imageBox, imagesVersion, onImageLoaded } from './images';
+import { addMarkdownNote } from './markdown';
 import {
   childFolders,
   folderPath,
@@ -464,7 +466,9 @@ function pageRow(p: Page, i: number, ol: HTMLElement): HTMLElement {
         }),
     },
     h('span', { class: 'num', 'aria-hidden': 'true' }, String(i + 1)),
-    thumb(p),
+    p.md === undefined
+      ? thumb(p)
+      : h('span', { class: 'thumb md-thumb', 'aria-hidden': 'true' }, icon(FileType, 20)),
     h('span', { class: 'name' }, p.title),
     more('Page options', (e) =>
       openMenu(e.currentTarget as Element, [
@@ -570,6 +574,7 @@ function results(q: string): HTMLElement[] {
           nb.name,
           ...p.texts.map((t) => t.text),
           ...(p.codes ?? []).map((c) => c.code),
+          p.md ?? '',
         ];
         if (!haystack.some((t) => t.toLowerCase().includes(needle))) continue;
         hits.push(
@@ -601,17 +606,31 @@ function results(q: string): HTMLElement[] {
   return hits.length ? hits : [h('p', { class: 'empty' }, `Nothing matches “${q}”.`)];
 }
 
-const heading = (text: string, onAdd: () => void, addLabel: string) =>
+const heading = (text: string, onAdd: () => void, addLabel: string, extra?: HTMLElement) =>
   h(
     'div',
     { class: 'sb-label' },
     h('span', {}, text),
+    extra,
     h(
       'button',
       { class: 'add', 'aria-label': addLabel, title: addLabel, onclick: onAdd },
       icon(Plus, 18),
     ),
   );
+const addNoteBtn = h(
+  'button',
+  {
+    class: 'add',
+    'aria-label': 'New Markdown note',
+    title: 'New Markdown note (typed, formats as you type)',
+    onclick: () => {
+      addMarkdownNote();
+      update(closeIfNarrow); // on phones, out of the way so the note can be typed in
+    },
+  },
+  icon(FileType, 18),
+);
 
 function render() {
   aside.hidden = !state.sidebarOpen;
@@ -639,7 +658,15 @@ function render() {
       'New folder',
     ),
     h('div', { class: 'sections', role: 'tree' }, ...tree(nb)),
-    heading('Pages', addPage, 'New page (Ctrl+N)'),
+    heading(
+      'Pages',
+      () => {
+        addPage();
+        update(closeIfNarrow);
+      },
+      'New page (Ctrl+N)',
+      addNoteBtn,
+    ),
     ol,
   );
 }

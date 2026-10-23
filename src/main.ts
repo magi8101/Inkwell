@@ -20,6 +20,7 @@ import {
 import './lasso';
 import './laser';
 import './text';
+import './markdown';
 import './update';
 import { setTool } from './toolbar';
 import { openTuning, tuneButton } from './tune';

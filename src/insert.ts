@@ -1,8 +1,9 @@
-import { ClipboardPaste, Code, FileText, ImagePlus, Images, NotebookText } from 'lucide';
+import { ClipboardPaste, Code, FileText, FileType, ImagePlus, Images, NotebookText } from 'lucide';
 import { addCodeBlock } from './code';
 import { h, icon, openMenu, toast } from './dom';
 import { storePicture } from './images';
 import { insert, takeOverPaste } from './lasso';
+import { importMarkdown, isMarkdown } from './markdown';
 import { importOneNote } from './onenote';
 import { importPdf } from './pdf-import';
 import { type ImageItem, uid } from './store';
@@ -62,6 +63,17 @@ oneInput.addEventListener('change', async () => {
   oneInput.value = '';
 });
 const isOneNote = (f: File) => /\.one$/i.test(f.name);
+const mdInput = h('input', {
+  type: 'file',
+  accept: '.md,.markdown,text/markdown',
+  multiple: true,
+  hidden: true,
+});
+document.body.append(mdInput);
+mdInput.addEventListener('change', async () => {
+  await importMarkdown([...(mdInput.files ?? [])]);
+  mdInput.value = '';
+});
 const isPdf = (f: File) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
 const pdfInput = h('input', {
   type: 'file',
@@ -110,6 +122,7 @@ insertButton.addEventListener('click', () =>
     { label: 'Paste picture', icon: ClipboardPaste, run: () => void pasteFromClipboard() },
     'sep',
     { label: 'PDF (to write on)…', icon: FileText, run: () => pdfInput.click() },
+    { label: 'Markdown file (.md)…', icon: FileType, run: () => mdInput.click() },
     { label: 'Code block (runs on Compiler Explorer)', icon: Code, run: () => void addCodeBlock() },
     { label: 'OneNote section (.one)…', icon: NotebookText, run: () => oneInput.click() },
   ]),
@@ -129,7 +142,8 @@ stage.addEventListener('drop', (e) => {
   void (async () => {
     for (const f of files.filter(isOneNote)) await importOneNote(f);
     for (const f of files.filter(isPdf)) await importPdf(f);
-    const pictures = files.filter((f) => !isOneNote(f) && !isPdf(f));
+    await importMarkdown(files.filter(isMarkdown));
+    const pictures = files.filter((f) => !isOneNote(f) && !isPdf(f) && !isMarkdown(f));
     if (pictures.length) await addPictures(pictures, toWorld(e.clientX, e.clientY));
   })();
 });

@@ -56,6 +56,10 @@ const ALGORITHMS: [string, string][] = [
   ],
   ['Code blocks', 'Code is compiled and run on Compiler Explorer (godbolt.org) for free.'],
   [
+    'Markdown notes',
+    'Typed notes edited with Tiptap: Markdown shortcuts turn into formatting as you type, and the note is saved back as plain Markdown (read and written with marked), so .md files open and save unchanged.',
+  ],
+  [
     'Updates',
     'Installers are signed with Inkwell’s key. The app checks the newest release and only installs a download whose signature matches.',
   ],

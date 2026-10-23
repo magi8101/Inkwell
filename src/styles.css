@@ -1780,3 +1780,212 @@ button.twisty:hover {
   color: var(--text-2);
   line-height: 1.5;
 }
+
+/* ---------- Markdown notes ---------- */
+
+#md {
+  position: absolute;
+  inset: 0;
+  /* Over the canvas, text, selection frame and live cursors; under the corner buttons (30). */
+  z-index: 26;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--page);
+  color: var(--text);
+}
+
+/* A note has no ink: the formatting bar takes the pen toolbar's place, and zoom doesn't apply. */
+body.md-page #toolbar,
+body.md-page #toolbar-fab,
+body.md-page #zoom {
+  display: none;
+}
+
+.md-bar {
+  position: sticky;
+  top: 12px;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  margin: 12px auto 0;
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.md-bar > * {
+  flex-shrink: 0;
+}
+
+.md-bar .tb-btn[aria-pressed="true"] {
+  background: var(--pressed);
+  color: var(--accent-text);
+}
+
+.md-doc {
+  max-width: 760px;
+  min-height: calc(100% - 80px);
+  margin: 0 auto;
+  /* Room at the bottom for the page counter and corner buttons. */
+  padding: 24px 24px 120px;
+  outline: none;
+  font-size: 17px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.md-doc > :first-child {
+  margin-top: 0;
+}
+
+.md-doc h1 {
+  font-size: 1.9em;
+  line-height: 1.2;
+}
+
+.md-doc h2 {
+  font-size: 1.45em;
+  line-height: 1.25;
+}
+
+.md-doc h3 {
+  font-size: 1.2em;
+}
+
+.md-doc a {
+  color: var(--accent-text);
+}
+
+.md-doc blockquote {
+  margin-left: 0;
+  padding-left: 16px;
+  border-left: 3px solid var(--border);
+  color: var(--text-2);
+}
+
+.md-doc code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.md-doc pre {
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.md-doc pre code {
+  padding: 0;
+  background: none;
+}
+
+.md-doc img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.md-doc hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.md-doc table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.md-doc th,
+.md-doc td {
+  min-width: 60px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.md-doc th {
+  background: var(--surface-2);
+  text-align: left;
+}
+
+.md-doc th p,
+.md-doc td p {
+  margin: 0;
+}
+
+.md-doc li > p {
+  margin: 0.15em 0;
+}
+
+.sb-label > span:first-child {
+  flex: 1;
+}
+
+.md-doc ul[data-type="taskList"] {
+  padding-left: 4px;
+  list-style: none;
+}
+
+.md-doc ul[data-type="taskList"] li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.md-doc ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  padding-top: 0.25em;
+}
+
+.md-doc ul[data-type="taskList"] input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.md-doc ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--text-2);
+  text-decoration: line-through;
+}
+
+.md-doc ul[data-type="taskList"] li > div {
+  flex: 1;
+}
+
+.md-doc ul[data-type="taskList"] p {
+  margin: 0;
+}
+
+.md-doc p.is-editor-empty:first-child::before {
+  content: "Type here — # for a heading, - for a list, [ ] for a checkbox";
+  float: left;
+  height: 0;
+  color: var(--text-2);
+  pointer-events: none;
+}
+
+.md-thumb {
+  display: grid;
+  place-items: center;
+  background: var(--page);
+  color: var(--text-2);
+}
+
+@media (max-width: 700px) {
+  .md-doc {
+    padding: 16px 16px 120px;
+    font-size: 16px;
+  }
+}

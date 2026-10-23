@@ -51,6 +51,7 @@ Modelled on Windows Ink, which draws "wet" ink on a high-priority path and "drie
 - **Lasso (L):** loop around ink and text to move, resize, rotate, recolour, copy/cut/paste/duplicate or delete.
 - **Pictures:** Insert → _Picture from files…_ or _Paste picture_ (works on iPad: copy in Photos, then paste), drag one onto the page, or Ctrl/⌘+V. Pictures sit under the ink; select them with the lasso to move, resize, rotate, copy or delete — ink drawn on them moves with them.
 - **OneNote:** Insert → _OneNote section (.one)…_ (or drag a `.one` file onto the page) opens it as a new, editable section — handwriting with pressure, colour and pen size, text as text boxes, and pictures. Both OneNote formats work (desktop OneNote 2010–2016 and OneDrive downloads). Export a section from OneNote for Windows with _File → Export → Section_. The importer is Rust compiled to WebAssembly (`onenote/`, rebuild with `npm run build:onenote`), using a vendored, MPL-2.0 `onenote_parser` patched to keep pen pressure; see `docs/research/onenote-format.md`.
+- **Markdown notes:** the sidebar's note button (next to + under Pages), Insert → _Markdown file (.md)…_ or dropping a `.md` file. Typed pages that format as you type (`# ` heading, `**bold**`, `- ` list, `[ ] ` checkbox, ``` ``` ``` code, tables), saved as Markdown and exported as `.md`. They name themselves after their first line. Not yet: ink on notes, notes in live sessions or in PDF exports.
 - **Export (Ctrl+E):** PDF (this page, chosen pages or the whole notebook; fit-to-content, A4 or Letter; vector ink and real text) or PNG.
 
 | Key         | Action                | Key                      | Action                |
@@ -63,4 +64,4 @@ Modelled on Windows Ink, which draws "wet" ink on a high-priority path and "drie
 | R           | Ruler                 | Ctrl+N                   | New page              |
 | S           | Shape auto-snap       | Ctrl+0 / Ctrl+= / Ctrl+- | Reset / zoom in / out |
 
-Notes are stored on the device in IndexedDB (older browser-storage notes migrate automatically). Not built yet: PDF import. PDF export uses the standard PDF fonts, so non-Latin text prints as "?".
+Notes are stored on the device in IndexedDB (older browser-storage notes migrate automatically). PDF export uses the standard PDF fonts, so non-Latin text prints as "?".

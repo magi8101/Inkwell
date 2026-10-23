@@ -341,7 +341,30 @@ function drawPattern(
 
 // --- Panel ---
 
+/** A Markdown note exports as its .md file. */
+function markdownPanel(p: Page): HTMLElement {
+  return h(
+    'div',
+    { class: 'style-panel export-panel' },
+    h('div', { class: 'panel-title' }, 'Export'),
+    h('p', { class: 'panel-sub' }, 'A Markdown note saves as a .md file.'),
+    h(
+      'button',
+      {
+        class: 'primary',
+        onclick: async () => {
+          const blob = new Blob([p.md ?? ''], { type: 'text/markdown' });
+          if (await download(blob, fileName(p.title, 'md')))
+            toast(IN_DESKTOP_APP ? 'Saved.' : 'Saved — check your Downloads folder.', 3000);
+        },
+      },
+      'Save as .md',
+    ),
+  );
+}
+
 function panel(): HTMLElement {
+  if (page().md !== undefined) return markdownPanel(page());
   let format: Format = 'pdf';
   let scope: Scope = 'page';
   let size: Size = 'fit';
@@ -461,12 +484,16 @@ function panel(): HTMLElement {
       if (format === 'png') saved = await exportPng(page(), paper);
       else {
         const all = notebook().sections.flatMap((s) => s.pages);
-        const pages =
+        const picked =
           scope === 'page'
             ? [page()]
             : scope === 'notebook'
               ? all
               : all.filter((p) => chosen.has(p.id));
+        // ponytail: Markdown notes aren't drawn into PDFs; each one exports as .md on its own.
+        const pages = picked.filter((p) => p.md === undefined);
+        if (pages.length < picked.length)
+          toast('Markdown notes are left out of PDFs — open one and export it as .md.', 4000);
         if (!pages.length) {
           toast('Choose at least one page.', 2500);
           return;

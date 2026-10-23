@@ -44,6 +44,8 @@ interface Session {
   ended: boolean;
 }
 let session: Session | null = null;
+/** Whether this device is in a live session right now. */
+export const inSession = () => session !== null;
 let applying = false;
 
 const pretty = (code: string) => `${code.slice(0, 3)}-${code.slice(3)}`;

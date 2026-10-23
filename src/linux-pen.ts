@@ -51,6 +51,20 @@ if (IN_LINUX_APP) {
     return has.call(this, real(id));
   };
 
+  // Two fingers on the page are Inkwell's own pan and zoom (pointer events), but WebKitGTK also
+  // zooms the whole app with them, despite touch-action: none, unless its own handling of
+  // multi-finger touches is cancelled. Only here: elsewhere (iPad especially) a resting palm plus
+  // the pencil are two touches, and cancelling those can get in the way of writing.
+  for (const type of ['touchstart', 'touchmove'] as const) {
+    document.addEventListener(
+      type,
+      (e) => {
+        if (e.touches.length > 1 && (e.target as Element).closest?.('#stage')) e.preventDefault();
+      },
+      { passive: false },
+    );
+  }
+
   const TYPES = [
     'pointerdown',
     'pointermove',

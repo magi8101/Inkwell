@@ -649,16 +649,3 @@ subscribe(() => {
   redraw();
 });
 shownPage = page().id;
-
-// Two fingers on the page are Inkwell's own pan and zoom (pointer events). WebKitGTK (the Linux
-// app) and Safari would also zoom the whole app with them, despite touch-action: none, unless
-// the browser's own handling of multi-finger touches is cancelled.
-for (const t of ['touchstart', 'touchmove'] as const) {
-  document.querySelector('#stage')!.addEventListener(
-    t,
-    (e) => {
-      if ((e as TouchEvent).touches.length > 1) e.preventDefault();
-    },
-    { passive: false },
-  );
-}

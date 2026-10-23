@@ -15,7 +15,7 @@ import {
   uid,
   update,
 } from './store';
-import { cut, hits, inkColor, outline, tipDiameter } from './stroke';
+import { cut, hits, inkColor, LINE_HEIGHT, outline, tipDiameter } from './stroke';
 import {
   isPalm,
   localToWorld,
@@ -279,6 +279,8 @@ interface Gesture {
   type: string;
   /** The page's shapes when it began (an eraser stroke can take shapes too). */
   beforeShapes: Shape[];
+  /** The page's text boxes when it began (the stroke eraser takes text boxes too). */
+  beforeTexts: TextBox[];
   /** When it last received a sample (performance.now()). */
   lastAt: number;
   mode: Mode;
@@ -483,7 +485,30 @@ function eraseAt(a: Gesture, x: number, y: number, r: number): boolean {
       changed = true;
     }
   }
+  // ...and text boxes (typed or converted from handwriting): the circle only has to touch the box.
+  if (a.mode === 'erase') {
+    const texts = page().texts;
+    const keep = texts.filter((t) => !textTouches(t, x, y, r));
+    if (keep.length !== texts.length) {
+      for (const t of texts)
+        if (!keep.includes(t)) textEl(t.id)?.style.setProperty('display', 'none');
+      page().texts = keep;
+      changed = true;
+    }
+  }
   return changed;
+}
+
+const textEl = (id: string) => document.querySelector<HTMLElement>(`#texts [data-id="${id}"]`);
+
+/** Does the eraser circle touch this (possibly turned) text box? Its height is the rendered one. */
+function textTouches(t: TextBox, x: number, y: number, r: number) {
+  const th = textEl(t.id)?.offsetHeight ?? t.size * LINE_HEIGHT;
+  const cos = Math.cos(-(t.angle ?? 0));
+  const sin = Math.sin(-(t.angle ?? 0));
+  const lx = (x - t.x) * cos - (y - t.y) * sin;
+  const ly = (x - t.x) * sin + (y - t.y) * cos;
+  return Math.hypot(Math.max(-lx, lx - t.w, 0), Math.max(-ly, ly - th, 0)) <= r;
 }
 
 const STALE_MS = 250;
@@ -691,6 +716,8 @@ function finish(keep: boolean) {
   if (!keep) {
     page().strokes = a.before;
     page().shapes = a.beforeShapes;
+    page().texts = a.beforeTexts;
+    for (const t of a.beforeTexts) textEl(t.id)?.style.removeProperty('display');
     redraw();
   } else if (a.mode === 'line') {
     const { tool, color, width, opacity, points } = a;
@@ -731,7 +758,7 @@ function finish(keep: boolean) {
     commit(a.before, [...a.before, { id: uid(), tool, color, width, opacity, pressure, points }]);
   } else {
     commitSnapshot(
-      { strokes: a.before, texts: page().texts, shapes: a.beforeShapes },
+      { strokes: a.before, texts: a.beforeTexts, shapes: a.beforeShapes },
       { strokes: page().strokes, texts: page().texts, shapes: page().shapes ?? NO_SHAPES },
     );
   }
@@ -810,6 +837,7 @@ bg.addEventListener('pointerdown', (e) => {
     points: [],
     before: page().strokes,
     beforeShapes: page().shapes ?? NO_SHAPES,
+    beforeTexts: page().texts,
     last: null,
     hold: null,
     shape: null,

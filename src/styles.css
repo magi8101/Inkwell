@@ -1689,6 +1689,9 @@ button.twisty:hover {
   padding: 4px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
 }
 
 .code-head .tb-btn {
@@ -1708,6 +1711,12 @@ button.twisty:hover {
   color: var(--text-2);
   cursor: grab;
   touch-action: none;
+}
+
+@media (pointer: coarse) {
+  .code-grip {
+    width: 40px;
+  }
 }
 
 .code-lang,

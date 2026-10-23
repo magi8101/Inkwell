@@ -246,10 +246,11 @@ function makeBlock(b: CodeBlock) {
     'aria-label': 'Program input (stdin)',
   });
   const out = h('pre', { class: 'code-out', 'aria-live': 'polite' });
+  const head = h('div', { class: 'code-head' }, grip, lang, compiler, libs, runBtn, del);
   const root = h(
     'div',
     { class: 'codeblock', 'data-id': b.id },
-    h('div', { class: 'code-head' }, grip, lang, compiler, libs, runBtn, del),
+    head,
     code,
     h('label', { class: 'code-stdin-row' }, h('span', {}, 'Input'), stdin),
     out,
@@ -331,9 +332,12 @@ function makeBlock(b: CodeBlock) {
     quiet(id, { output: result });
   });
   libs.addEventListener('click', () => togglePopover(libs, libraryPanel(id)));
-  grip.addEventListener('pointerdown', (e) => {
+  // The grip, or any empty part of the header bar, drags the block (a 24 px grip is easy to miss).
+  head.addEventListener('pointerdown', (e) => {
+    const t = e.target as Element;
+    if (t !== head && !grip.contains(t)) return;
     e.preventDefault();
-    capture(grip, e.pointerId);
+    capture(head, e.pointerId);
     const b0 = cur();
     if (!b0) return;
     const start = toWorld(e.clientX, e.clientY);
@@ -342,14 +346,21 @@ function makeBlock(b: CodeBlock) {
       root.style.left = `${b0.x + w.x - start.x}px`;
       root.style.top = `${b0.y + w.y - start.y}px`;
     };
-    const up = (u: PointerEvent) => {
-      grip.removeEventListener('pointermove', move);
-      grip.removeEventListener('pointerup', up);
+    const end = (u: PointerEvent) => {
+      head.removeEventListener('pointermove', move);
+      head.removeEventListener('pointerup', end);
+      head.removeEventListener('pointercancel', end);
+      if (u.type === 'pointercancel') {
+        root.style.left = `${b0.x}px`;
+        root.style.top = `${b0.y}px`;
+        return;
+      }
       const w = toWorld(u.clientX, u.clientY);
       change(id, { x: b0.x + w.x - start.x, y: b0.y + w.y - start.y });
     };
-    grip.addEventListener('pointermove', move);
-    grip.addEventListener('pointerup', up);
+    head.addEventListener('pointermove', move);
+    head.addEventListener('pointerup', end);
+    head.addEventListener('pointercancel', end);
   });
   layer.append(root);
   const el = { root, code, stdin, out, compiler, run: runBtn, libs, lang };

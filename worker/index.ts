@@ -7,6 +7,7 @@
 // when the creator leaves. Nothing is stored after that; each person keeps their own copy.
 
 import { DurableObject } from 'cloudflare:workers';
+import { download } from './download';
 
 interface Env {
   LIVE: DurableObjectNamespace<LiveSession>;
@@ -31,6 +32,7 @@ export default {
       return env.LIVE.get(env.LIVE.idFromName(code)).fetch(req);
     }
     if (url.pathname === '/api/ocr') return readHandwriting(req, env);
+    if (url.pathname === '/download' || url.pathname.startsWith('/download/')) return download(req);
     return env.ASSETS.fetch(req);
   },
 } satisfies ExportedHandler<Env>;

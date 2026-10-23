@@ -1,6 +1,6 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { Info, X } from 'lucide';
-import { h, icon } from './dom';
+import { h, icon, SERVER } from './dom';
 
 // "About Inkwell": the version, and how the app works — every algorithm it uses, in plain words.
 
@@ -97,6 +97,17 @@ export function openAbout() {
         'div',
         { class: 'cal-body' },
         version,
+        h(
+          'p',
+          { class: 'cal-text' },
+          'Apps for Windows, Mac, Linux and Android: ',
+          h(
+            'a',
+            { href: `${SERVER}/download`, target: '_blank', rel: 'noopener' },
+            'download page',
+          ),
+          '. Installed apps update themselves.',
+        ),
         h('h2', { class: 'cal-title' }, 'How it works'),
         h(
           'dl',

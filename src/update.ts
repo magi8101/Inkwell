@@ -1,6 +1,6 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { h, toast } from './dom';
+import { h, SERVER, toast } from './dom';
 import { saveNow } from './store';
 
 // "A new version is out" for the installed apps (the website is always up to date). Desktop uses
@@ -8,7 +8,8 @@ import { saveNow } from './store';
 // Inkwell's signing key, installs it and restarts. Android can't replace itself, so it opens the
 // new APK's download and Android asks to install it over this one (same signing key).
 
-const RELEASES = 'https://github.com/magi8101/Inkwell/releases/latest';
+// Where to get the newest installer by hand: the site's download page picks the right file.
+const RELEASES = `${SERVER}/download`;
 const IN_APP = '__TAURI_INTERNALS__' in window;
 const ANDROID = /Android/.test(navigator.userAgent);
 

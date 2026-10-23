@@ -49,8 +49,10 @@ jobs:
           api="repos/$GITHUB_REPOSITORY/releases"
           # The id comes straight from the create/update call: a fresh draft isn't findable by tag yet.
           if existing=$(gh release view "$TAG" --json databaseId --jq .databaseId 2>/dev/null); then
-            # Rebuilding: refresh the name and notes but leave a published release visible.
-            id=$(gh api -X PATCH "$api/$existing" -f name="$title" -F body=@notes.md --jq .id)
+            # Rebuilding: refresh the name and notes but leave a published release visible. Moving
+            # a tag turns a draft's tag into "untagged-…"; tag_name puts it back so the APK and
+            # publish steps, which find the release by tag, still can.
+            id=$(gh api -X PATCH "$api/$existing" -f tag_name="$TAG" -f name="$title" -F body=@notes.md --jq .id)
           else
             id=$(gh api "$api" -f tag_name="$TAG" -f name="$title" -F draft=true -F body=@notes.md --jq .id)
           fi

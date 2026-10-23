@@ -27,6 +27,11 @@ tauri-plugin-fs = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 
+# Linux: WebKitGTK reports a pen as a mouse; GTK's own pen events fill in what it drops.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+webkit2gtk = { version = "2.0", features = ["v2_40"] }
+
 # Windows: switching off WebView2's own pinch zoom (it scaled the whole app, not the page).
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"

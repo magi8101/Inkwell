@@ -1,3 +1,5 @@
+// First, so Linux pen input is fixed up before any other listener sees it (see linux-pen.ts).
+import './linux-pen';
 import './styles.css';
 import { FileText, Grid3x3, Grip, Moon, Rows3, Square, Sun, SunMoon } from 'lucide';
 import { h, IS_MAC, icon, keys, toast, togglePopover } from './dom';

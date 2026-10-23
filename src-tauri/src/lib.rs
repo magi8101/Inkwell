@@ -265,6 +265,43 @@ fn no_pinch_zoom(window: &tauri::WebviewWindow) {
     });
 }
 
+/// `WebKitGTK` (the Linux app's web engine) reports a stylus as a mouse: no pen type, no pressure
+/// or tilt, the side button as a middle click and the eraser end as a plain mouse. GTK still
+/// knows, so each pen event's tool, pressure and tilt go to the page first, ahead of the mouse
+/// event `WebKit` sends for it; `src/linux-pen.ts` turns those mouse events back into pen events.
+#[cfg(target_os = "linux")]
+fn pen_bridge(window: &tauri::WebviewWindow) {
+    use gtk::gdk::{AxisUse, EventType, InputSource};
+    use gtk::prelude::*;
+    use webkit2gtk::WebViewExt;
+    let _ = window.with_webview(|w| {
+        w.inner().connect_event(|view, ev| {
+            let tool = match ev.source_device().map(|d| d.source()) {
+                Some(InputSource::Pen) => "pen",
+                Some(InputSource::Eraser) => "eraser",
+                _ => return gtk::glib::Propagation::Proceed,
+            };
+            let tool = match ev.event_type() {
+                EventType::ProximityOut => "out",
+                EventType::MotionNotify
+                | EventType::ButtonPress
+                | EventType::ButtonRelease
+                | EventType::ProximityIn => tool,
+                _ => return gtk::glib::Propagation::Proceed,
+            };
+            let axis = |a| ev.axis(a).unwrap_or(0.0);
+            let js = format!(
+                "window.__inkwellPen?.('{tool}',{:.3},{:.0},{:.0})",
+                axis(AxisUse::Pressure),
+                axis(AxisUse::Xtilt) * 90.0,
+                axis(AxisUse::Ytilt) * 90.0
+            );
+            view.evaluate_javascript(&js, None, None, None::<&gtk::gio::Cancellable>, |_| {});
+            gtk::glib::Propagation::Proceed // WebKit still handles the event as usual
+        });
+    });
+}
+
 /// Starts the app.
 ///
 /// # Panics
@@ -296,7 +333,11 @@ pub fn run() {
             if let Some(w) = app.get_webview_window("main") {
                 no_pinch_zoom(&w);
             }
-            #[cfg(not(windows))]
+            #[cfg(target_os = "linux")]
+            if let Some(w) = app.get_webview_window("main") {
+                pen_bridge(&w);
+            }
+            #[cfg(not(any(windows, target_os = "linux")))]
             let _ = app;
             Ok(())
         })

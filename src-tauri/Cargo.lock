@@ -1771,6 +1771,7 @@ dependencies = [
 name = "inkwell"
 version = "0.2.2"
 dependencies = [
+ "gtk",
  "percent-encoding",
  "serde_json",
  "tauri",
@@ -1780,6 +1781,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-updater",
+ "webkit2gtk",
  "webview2-com",
  "windows-core",
 ]

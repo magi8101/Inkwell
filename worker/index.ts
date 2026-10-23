@@ -176,6 +176,9 @@ export class LiveSession extends DurableObject<Env> {
   private peers = new Map<WebSocket, Peer>();
   private strokes = new Map<string, Item>();
   private texts: Item[] = [];
+  private codes: Item[] = [];
+  /** The shared note's Markdown, when the shared page is a Markdown note. */
+  private md: string | null = null;
   private meta: Record<string, unknown> = {};
 
   async fetch(req: Request): Promise<Response> {
@@ -201,6 +204,8 @@ export class LiveSession extends DurableObject<Env> {
       // A new session under this code starts empty.
       this.strokes.clear();
       this.texts = [];
+      this.codes = [];
+      this.md = null;
       this.meta = {};
     }
     const peer: Peer = { id: crypto.randomUUID().slice(0, 8), ...this.identity(), host };
@@ -212,6 +217,8 @@ export class LiveSession extends DurableObject<Env> {
         peers: [...this.peers.values()].filter((p) => p !== peer),
         meta: this.meta,
         texts: this.texts,
+        codes: this.codes,
+        md: this.md,
       }),
     );
     for (const strokes of batches([...this.strokes.values()])) {
@@ -245,6 +252,8 @@ export class LiveSession extends DurableObject<Env> {
       strokes?: Item[];
       ids?: string[];
       texts?: Item[];
+      codes?: Item[];
+      md?: string | null;
       meta?: object;
       x?: number;
       y?: number;
@@ -266,6 +275,14 @@ export class LiveSession extends DurableObject<Env> {
       case 'texts':
         if (!Array.isArray(m.texts)) return;
         this.texts = m.texts;
+        break;
+      case 'codes':
+        if (!Array.isArray(m.codes)) return;
+        this.codes = m.codes;
+        break;
+      case 'md':
+        if (m.md !== null && typeof m.md !== 'string') return;
+        this.md = m.md ?? null;
         break;
       case 'meta':
         if (typeof m.meta !== 'object' || !m.meta) return;
@@ -299,6 +316,8 @@ export class LiveSession extends DurableObject<Env> {
     this.peers.clear();
     this.strokes.clear();
     this.texts = [];
+    this.codes = [];
+    this.md = null;
     this.meta = {};
   }
 

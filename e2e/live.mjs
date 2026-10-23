@@ -77,12 +77,60 @@ await host.mouse.move(720, 610);
 await wait(500);
 R.cursorsShown = await guest.$$eval('.live-cursor', (c) => c.length === 1 && !c[0].hidden);
 
+// Code blocks are shared: one added and typed into by the creator appears for the guest, and the
+// guest's edit reaches the creator.
+await host.click('[aria-label="Insert"]');
+await host.getByText('Code block (runs on Compiler Explorer)').click();
+await host.waitForSelector('.codeblock');
+await host.fill('.codeblock .code-src', 'print("from the creator")');
+await host.locator('.codeblock .code-src').blur();
+await guest.waitForSelector('.codeblock', { timeout: 10000 });
+await wait(800);
+R.codeBlockReachesGuest = (await guest.inputValue('.codeblock .code-src')) === 'print("from the creator")';
+await guest.fill('.codeblock .code-src', 'print("from the guest")');
+await guest.locator('.codeblock .code-src').blur();
+await wait(1000);
+R.codeEditReachesCreator = (await host.inputValue('.codeblock .code-src')) === 'print("from the guest")';
+await host.click('[aria-label="Delete code block"]');
+await wait(900);
+R.codeDeleteReachesGuest = (await guest.$$('.codeblock')).length === 0;
+
 // The creator leaves: the session ends, and the guest keeps the note.
 await openLive(host);
 await host.click('text=End session for everyone');
 await wait(1000);
 R.sessionEndsForGuest = await guest.evaluate(() => !document.querySelector('[aria-label="Live session"]').classList.contains('live-on'));
 R.guestKeepsCopy = (await strokesOf(guest)) === 2;
+
+// Markdown notes are shared: a second session on a note; typing on either side reaches the other.
+await host.click('[aria-label="New Markdown note"]');
+await host.waitForSelector('.md-doc', { timeout: 15000 });
+await host.click('.md-doc');
+await host.keyboard.type('# Shared note');
+await wait(900);
+await openLive(host);
+await host.click('text=Start a live session');
+await host.waitForFunction(() => document.querySelector('.live-code output')?.textContent?.length === 7);
+const code2 = await host.textContent('.live-code output');
+await host.keyboard.press('Escape');
+const guest2 = await open();
+await openLive(guest2);
+await guest2.fill('.live-input', code2.replace('-', '').toLowerCase());
+await guest2.click('.live-panel .cal-btn');
+await guest2.waitForSelector('.md-doc', { timeout: 15000 });
+await guest2.keyboard.press('Escape');
+await wait(500);
+R.mdNoteReachesGuest = (await guest2.textContent('.md-doc')).includes('Shared note');
+await host.click('.md-doc');
+await host.keyboard.press('Control+End');
+await host.keyboard.type(' from host');
+await guest2.waitForFunction(() => document.querySelector('.md-doc')?.textContent.includes('from host'), null, { timeout: 10000 });
+R.mdHostTypingReachesGuest = true;
+await guest2.click('.md-doc');
+await guest2.keyboard.press('Control+End');
+await guest2.keyboard.type(' and guest');
+await host.waitForFunction(() => document.querySelector('.md-doc')?.textContent.includes('and guest'), null, { timeout: 10000 });
+R.mdGuestTypingReachesHost = true;
 
 // A wrong code is refused with a clear message.
 await openLive(guest);

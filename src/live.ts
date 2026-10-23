@@ -2,7 +2,9 @@ import { Copy, LogOut, Radio, Users } from 'lucide';
 import { h, icon, SERVER, toast, togglePopover } from './dom';
 import {
   type Background,
+  type CodeBlock,
   type Notebook,
+  newMarkdownPage,
   newPage,
   newSection,
   notebook,
@@ -40,7 +42,13 @@ interface Session {
   /** The shared note: the host's page, or each guest's own copy. */
   pageId: string;
   /** What the others already have, to send only changes. */
-  sent: { strokes: Stroke[]; texts: TextBox[]; meta: string };
+  sent: {
+    strokes: Stroke[];
+    texts: TextBox[];
+    meta: string;
+    codes: CodeBlock[] | undefined;
+    md: string | undefined;
+  };
   ended: boolean;
 }
 let session: Session | null = null;
@@ -107,6 +115,31 @@ function cleanText(t: unknown): TextBox | null {
     ...(num(x.angle) ? { angle: x.angle } : {}),
   };
 }
+function cleanCode(c: unknown): CodeBlock | null {
+  const x = c as CodeBlock;
+  if (!x || typeof x.id !== 'string' || x.id.length > 64) return null;
+  if (![x.x, x.y, x.w].every(num)) return null;
+  if (![x.lang, x.compiler, x.code].every((v) => typeof v === 'string')) return null;
+  const libs = (Array.isArray(x.libs) ? x.libs : [])
+    .filter((l) => typeof l?.id === 'string' && typeof l?.version === 'string')
+    .slice(0, 30)
+    .map((l) => ({ id: l.id.slice(0, 64), version: l.version.slice(0, 64) }));
+  return {
+    id: x.id,
+    x: x.x,
+    y: x.y,
+    w: x.w,
+    lang: x.lang.slice(0, 32),
+    compiler: x.compiler.slice(0, 64),
+    code: x.code.slice(0, 100_000),
+    libs,
+    output: typeof x.output === 'string' ? x.output.slice(0, 100_000) : '',
+    ...(typeof x.stdin === 'string' ? { stdin: x.stdin.slice(0, 20_000) } : {}),
+  };
+}
+const cleanCodes = (v: unknown) =>
+  (Array.isArray(v) ? v : []).map(cleanCode).filter((c): c is CodeBlock => !!c);
+const cleanMd = (v: unknown) => (typeof v === 'string' ? v.slice(0, 500_000) : undefined);
 const BACKGROUNDS: Background[] = ['blank', 'dots', 'grid', 'lines'];
 
 // --- Sending ---
@@ -148,6 +181,14 @@ subscribe(() => {
     send({ t: 'texts', texts: p.texts });
     sent.texts = p.texts;
   }
+  if (p.codes !== sent.codes) {
+    send({ t: 'codes', codes: p.codes ?? [] });
+    sent.codes = p.codes;
+  }
+  if (p.md !== sent.md) {
+    send({ t: 'md', md: p.md ?? null });
+    sent.md = p.md;
+  }
   const meta = metaOf(p);
   if (meta !== sent.meta) {
     send({ t: 'meta', meta: JSON.parse(meta) });
@@ -165,8 +206,15 @@ function applyRemote(fn: (p: Page) => void) {
   } finally {
     applying = false;
   }
-  session.sent = { strokes: p.strokes, texts: p.texts, meta: metaOf(p) };
+  session.sent = sentOf(p);
 }
+const sentOf = (p: Page) => ({
+  strokes: p.strokes,
+  texts: p.texts,
+  meta: metaOf(p),
+  codes: p.codes,
+  md: p.md,
+});
 
 // --- Receiving ---
 
@@ -203,12 +251,19 @@ function receive(raw: string) {
         const p = sharedPage()!;
         send({ t: 'meta', meta: JSON.parse(metaOf(p)) });
         send({ t: 'texts', texts: p.texts });
+        send({ t: 'codes', codes: p.codes ?? [] });
+        send({ t: 'md', md: p.md ?? null });
         sendStrokes(p.strokes);
-        s.sent = { strokes: p.strokes, texts: p.texts, meta: metaOf(p) };
+        s.sent = sentOf(p);
         toast(`Live session started. Others join with code ${pretty(s.code)}.`, 5000);
       } else {
         // The guest's own copy of the note, in a "Live sessions" folder.
-        const copy = newPage(`Live ${pretty(s.code)}`);
+        const md = cleanMd(m.md);
+        const copy =
+          md === undefined
+            ? newPage(`Live ${pretty(s.code)}`)
+            : newMarkdownPage(`Live ${pretty(s.code)}`, md);
+        copy.codes = cleanCodes(m.codes);
         copy.texts = ((m.texts as unknown[]) ?? []).map(cleanText).filter((t): t is TextBox => !!t);
         applyMeta(copy, m.meta);
         applying = true;
@@ -225,7 +280,7 @@ function receive(raw: string) {
         });
         applying = false;
         s.pageId = copy.id;
-        s.sent = { strokes: copy.strokes, texts: copy.texts, meta: metaOf(copy) };
+        s.sent = sentOf(copy);
         toast(`Joined as ${s.me.name}. Draw away!`, 3500);
       }
       changed();
@@ -258,6 +313,20 @@ function receive(raw: string) {
       const texts = ((m.texts as unknown[]) ?? []).map(cleanText).filter((t): t is TextBox => !!t);
       applyRemote((p) => {
         p.texts = texts;
+      });
+      return;
+    }
+    case 'codes': {
+      const codes = cleanCodes(m.codes);
+      applyRemote((p) => {
+        p.codes = codes;
+      });
+      return;
+    }
+    case 'md': {
+      const md = cleanMd(m.md);
+      applyRemote((p) => {
+        if (md !== undefined && p.md !== undefined) p.md = md;
       });
       return;
     }
@@ -309,7 +378,7 @@ function connect(code: string, host: boolean) {
     me: null,
     peers: new Map(),
     pageId: page().id,
-    sent: { strokes: [], texts: [], meta: '' },
+    sent: { strokes: [], texts: [], meta: '', codes: undefined, md: undefined },
     ended: false,
   };
   ws.addEventListener('message', (e) => {

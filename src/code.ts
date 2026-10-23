@@ -7,7 +7,7 @@ import { toWorld, view } from './viewport';
 // Code blocks: write code on the page and run it on Compiler Explorer (godbolt.org), which
 // compiles and runs it on its servers for free. Libraries (Compiler Explorer's stand-in for package
 // managers: fmt, Boost, Eigen… for C++) are picked per block. Blocks sit on the text layer, so they
-// pan, zoom and turn with the page. ponytail: not in undo history or live sessions yet.
+// pan, zoom and turn with the page. They are part of undo and of live sessions.
 
 const API = 'https://godbolt.org/api';
 const LANGS: [id: string, label: string, starter: string][] = [

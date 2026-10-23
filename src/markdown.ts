@@ -15,15 +15,14 @@ import {
   TextQuote,
   Undo2,
 } from 'lucide';
-import { h, icon, toast } from './dom';
-import { inSession } from './live';
+import { h, icon } from './dom';
 import { newMarkdownPage, page, section, subscribe, update } from './store';
 
 // Markdown notes: typed pages that format as you type (`# ` → heading, `**bold**` → bold, `- [ ] `
 // → checkbox…), saved as Markdown text so they open and save as .md files unchanged. The editor
 // (Tiptap) loads on the first note shown. A note replaces the ink canvas with the editor and the
-// pen toolbar with a formatting bar for touch screens. ponytail: no ink on notes, and not shared
-// in live sessions yet.
+// pen toolbar with a formatting bar for touch screens. In live sessions a note is shared as a
+// whole (last write wins). ponytail: no ink on notes yet.
 
 const bar = h('div', { class: 'md-bar', role: 'toolbar', 'aria-label': 'Formatting' });
 const body = h('div', { class: 'md-body' });
@@ -203,10 +202,19 @@ function sync() {
     }
     return;
   }
-  // Another note, or this one changed outside the editor (e.g. its file changed on disk).
-  if (p.id !== shownId && inSession())
-    toast('Markdown notes aren’t shared in live sessions yet — others don’t see this one.', 4000);
-  if (p.id !== shownId || (p.md !== lastMd && !saveTimer)) void open(p.id, p.md ?? '');
+  if (p.id !== shownId) void open(p.id, p.md ?? '');
+  // This note changed outside the editor (someone else in a live session, or its file on disk):
+  // swap the text in place and keep the caret about where it was, rather than reopening it.
+  else if (p.md !== lastMd && !saveTimer) external(p.md ?? '');
+}
+
+function external(md: string) {
+  if (!editor) return; // still loading: open() reads the newest text
+  const { from, to } = editor.state.selection;
+  lastMd = md;
+  editor.commands.setContent(md, { contentType: 'markdown', emitUpdate: false });
+  const end = Math.max(1, editor.state.doc.content.size - 1);
+  editor.commands.setTextSelection({ from: Math.min(from, end), to: Math.min(to, end) });
 }
 subscribe(sync);
 sync();

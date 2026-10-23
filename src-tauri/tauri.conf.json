@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net; worker-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https://inkwell.sharmamagi0.workers.dev wss://inkwell.sharmamagi0.workers.dev https://cdn.jsdelivr.net https://godbolt.org"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net; worker-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https://inkwell.sharmamagi0.workers.dev wss://inkwell.sharmamagi0.workers.dev https://cdn.jsdelivr.net https://godbolt.org https://api.github.com"
     }
   },
   "bundle": {
@@ -41,6 +41,10 @@
     "windows": { "nsis": { "installMode": "currentUser" } }
   },
   "plugins": {
-    "updater": { "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2NUM4NDUwNUY1OTU2M0QKUldROVZsbGZVSVJjVmlsb0JQV0t2UUc0WUg4K2FaaDBFRWxVTlhCNXYzL1M1QU1RdGIzN3RkMVUK" }
+    "updater": {
+      "endpoints": ["https://github.com/magi8101/Inkwell/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" },
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2NUM4NDUwNUY1OTU2M0QKUldROVZsbGZVSVJjVmlsb0JQV0t2UUc0WUg4K2FaaDBFRWxVTlhCNXYzL1M1QU1RdGIzN3RkMVUK"
+    }
   }
 }

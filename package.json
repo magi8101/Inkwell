@@ -33,6 +33,9 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-opener": "^2.7.2",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.0",
     "lucide": "^1.61.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.4.299",

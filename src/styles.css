@@ -1169,6 +1169,43 @@ button.primary:disabled {
   animation: pop-in 160ms var(--ease);
 }
 
+.update-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+}
+
+.update-bar span {
+  flex: 1;
+}
+
+/* Phones: full width above the home bar, buttons big enough for a thumb. */
+@media (max-width: 520px) {
+  .update-bar {
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    max-width: none;
+    translate: none;
+    flex-wrap: wrap;
+  }
+
+  .update-bar span {
+    flex-basis: 100%;
+    padding: 4px 0;
+  }
+
+  .update-bar button {
+    flex: 1;
+  }
+}
+
+.update-bar .update-go {
+  background: var(--accent);
+  color: var(--surface);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before {

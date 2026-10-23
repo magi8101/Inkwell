@@ -1,4 +1,5 @@
 import { Gauge } from 'lucide';
+import { openAbout } from './about';
 import { openCalibration } from './calibrate';
 import { cursorFromFile } from './cursor';
 import { h, icon, toast, togglePopover } from './dom';
@@ -284,6 +285,17 @@ function panel(): HTMLElement {
           }),
       },
       'Reset to defaults',
+    ),
+    h(
+      'button',
+      {
+        class: 'menu-item',
+        onclick: () => {
+          openTuning(); // closes this panel
+          openAbout();
+        },
+      },
+      'About Inkwell — how it works',
     ),
   );
   const unsub = subscribe(refresh);

@@ -1735,3 +1735,20 @@ button.twisty:hover {
   max-height: 300px;
   overflow-y: auto;
 }
+
+/* ---------- About ---------- */
+
+.about-list {
+  margin: 0;
+}
+
+.about-list dt {
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+.about-list dd {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  line-height: 1.5;
+}

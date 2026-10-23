@@ -2154,3 +2154,11 @@ body.md-page #zoom {
   color: var(--text-2);
   font-size: 12px;
 }
+
+/* Touch screens: iPhone and iPad zoom the whole page when an input under 16px gets focus. */
+@media (pointer: coarse) {
+  .rename,
+  .sb-search input {
+    font-size: 16px;
+  }
+}

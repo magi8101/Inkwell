@@ -344,6 +344,23 @@ async function suite() {
     st2.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === st2.pageId)?.paper === undefined;
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   await wait(100);
+  // Renaming: a redraw of the sidebar (queued by any change) must not delete the box being typed
+  // in — that closed the on-screen keyboard. Open the rename box, cause a change, wait, type.
+  document.querySelector('.row.page [aria-label="Page options"]').click();
+  await wait(100);
+  menuItemNow('Rename').click();
+  await wait(100);
+  btn('Theme: system')?.click(); // any change that redraws the sidebar
+  document.querySelector('[aria-label^="Theme"]')?.click();
+  await wait(1500);
+  const box = document.querySelector('input.rename');
+  R.renameBoxSurvivesRedraw = !!box && document.activeElement === box;
+  if (box) {
+    box.value = 'Chemistry';
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  }
+  await wait(300);
+  R.renameSaves = (await pg()).title === 'Chemistry' && !document.querySelector('input.rename');
   // Reported: pick pen 1, open the colour changer, pick a colour → pen 1 changed too. Now only the
   // current pen changes, and the panel offers to keep it as a new pen or update pen 1.
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); // closes the "new pen" panel

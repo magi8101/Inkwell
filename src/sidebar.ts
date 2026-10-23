@@ -132,19 +132,44 @@ function doubleTap(id: string): boolean {
   return hit;
 }
 
+/**
+ * While a name is being typed the lists must not be redrawn: a redraw replaces the input, which
+ * closes the on-screen keyboard (the first tap of a double-tap queues one, as do thumbnails
+ * loading and saves). Redraws wait here and run when the rename is over.
+ */
+let renaming = false;
+let redrawAfterRename = false;
+
 function rename(id: string, current: string, commit: (v: string) => void) {
   const label = list.querySelector<HTMLElement>(`[data-id="${id}"] .name`) ?? nbName;
-  const input = h('input', { class: 'rename', value: current, 'aria-label': 'Name' });
+  const input = h('input', {
+    class: 'rename',
+    value: current,
+    'aria-label': 'Name',
+    enterKeyHint: 'done',
+    autocomplete: 'off',
+    spellcheck: false,
+  });
   label.replaceWith(input);
+  renaming = true;
   input.focus();
-  input.select();
+  // Selecting the whole name straight after focusing makes touch screens flash their selection
+  // handles and close the keyboard; there the caret goes to the end instead.
+  if (matchMedia('(pointer: coarse)').matches)
+    input.setSelectionRange(current.length, current.length);
+  else input.select();
   let done = false;
   const finish = (save: boolean) => {
     if (done) return;
     done = true;
+    renaming = false;
     const v = input.value.trim();
     if (save && v && v !== current) commit(v);
     else input.replaceWith(label);
+    if (redrawAfterRename) {
+      redrawAfterRename = false;
+      render();
+    }
   };
   input.addEventListener('keydown', (e) => {
     e.stopPropagation();
@@ -152,7 +177,9 @@ function rename(id: string, current: string, commit: (v: string) => void) {
     if (e.key === 'Escape') finish(false);
   });
   input.addEventListener('blur', () => finish(true));
-  input.addEventListener('pointerdown', (e) => e.stopPropagation());
+  // Taps in the box are for the box: not a tap (or double-tap) on the folder row behind it.
+  for (const type of ['pointerdown', 'click', 'dblclick'] as const)
+    input.addEventListener(type, (e) => e.stopPropagation());
 }
 
 const renamePage = (p: Page) =>
@@ -537,8 +564,14 @@ function pageRow(p: Page, i: number, ol: HTMLElement): HTMLElement {
       li.removeEventListener('pointerup', up);
       li.removeEventListener('pointercancel', up);
       if (!dragging) {
-        if (doubleTap(p.id)) renamePage(p);
-        else
+        // The rename starts from the click that follows this tap, not from here: the phone's
+        // keyboard only opens for a focus made inside a click, and an input focused here loses
+        // focus again when that click lands.
+        if (doubleTap(p.id)) {
+          const go = () => renamePage(p);
+          li.addEventListener('click', go, { once: true });
+          setTimeout(() => li.removeEventListener('click', go), 600); // no click came (cancelled)
+        } else
           update((s) => {
             s.pageId = p.id;
             closeIfNarrow(s);
@@ -639,6 +672,10 @@ function render() {
   aside.hidden = !state.sidebarOpen;
   openBtn.hidden = state.sidebarOpen;
   if (!state.sidebarOpen) return;
+  if (renaming) {
+    redrawAfterRename = true;
+    return;
+  }
   nbName.textContent = notebook().name;
   renderVault();
   const q = state.query.trim();

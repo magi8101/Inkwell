@@ -172,6 +172,7 @@ function cleanShape(v: unknown): Shape | null {
     width: Math.min(200, Math.max(0.1, x.width)),
     opacity: Math.min(1, Math.max(0, x.opacity)),
     fill: x.fill,
+    ...(hex(x.fillColor) ? { fillColor: x.fillColor } : {}),
     dash: x.dash,
     ...(id(x.bindStart) ? { bindStart: id(x.bindStart) } : {}),
     ...(id(x.bindEnd) ? { bindEnd: id(x.bindEnd) } : {}),

@@ -67,6 +67,8 @@ export interface Shape {
   opacity: number;
   /** none; a light tint of the colour; the colour itself; or diagonal hatching. */
   fill: 'none' | 'tint' | 'solid' | 'hatch';
+  /** The fill's own colour when it differs from the line's (from an Excalidraw file); else `color`. */
+  fillColor?: string;
   dash: 'solid' | 'dashed' | 'dotted';
   /** Shapes sharing a group are selected, moved and arranged together. */
   group?: string;

@@ -149,6 +149,67 @@ for (const [name, engine] of [['Chromium', chromium], ['Firefox', firefox], ['We
   R.stampDeletes = (await p.locator('.stamp-use').count()) === 0;
   await p.keyboard.press('Escape');
 
+  // --- Excalidraw: open a file, save the page back out, open that again ---
+  const curPage = () =>
+    p.evaluate(async () => {
+      dispatchEvent(new Event('pagehide'));
+      await new Promise((r) => setTimeout(r, 150));
+      return new Promise((res) => {
+        const q = indexedDB.open('inkwell');
+        q.onsuccess = () => {
+          const g = q.result.transaction('kv').objectStore('kv').get('inkwell:state');
+          g.onsuccess = () => {
+            const s = g.result;
+            res(s.notebooks.flatMap((n) => n.sections).flatMap((x) => x.pages).find((x) => x.id === s.pageId));
+          };
+        };
+      });
+    });
+  const base = {
+    angle: 0, strokeColor: '#1e1e1e', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 2,
+    strokeStyle: 'solid', roughness: 1, opacity: 100, groupIds: [], isDeleted: false, locked: false,
+  };
+  const sample = {
+    type: 'excalidraw',
+    version: 2,
+    elements: [
+      { ...base, id: 'r', type: 'rectangle', x: 100, y: 100, width: 200, height: 100, backgroundColor: '#ffec99' },
+      { ...base, id: 'e', type: 'ellipse', x: 500, y: 100, width: 120, height: 80, fillStyle: 'hachure', backgroundColor: '#a5d8ff' },
+      { ...base, id: 'a', type: 'arrow', x: 300, y: 150, width: 200, height: 0, points: [[0, 0], [200, 0]], endArrowhead: 'arrow', startBinding: { elementId: 'r', focus: 0, gap: 4 }, endBinding: { elementId: 'e', focus: 0, gap: 4 } },
+      { ...base, id: 'f', type: 'freedraw', x: 10, y: 10, width: 20, height: 20, points: [[0, 0], [10, 10], [20, 20]], pressures: [0.2, 0.6, 0.9], simulatePressure: false },
+      { ...base, id: 't', type: 'text', x: 120, y: 130, width: 150, height: 25, text: 'Hello', fontSize: 20, fontFamily: 2 },
+    ],
+    appState: { viewBackgroundColor: '#ffffff' },
+    files: {},
+  };
+  const file = `${(await import('node:os')).tmpdir()}/diagram-${name}.excalidraw`;
+  fs.writeFileSync(file, JSON.stringify(sample));
+  await p.locator('[aria-label="Insert"]').click();
+  const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.locator('.menu .menu-item', { hasText: 'Excalidraw' }).click()]);
+  await chooser.setFiles(file);
+  await p.waitForTimeout(800);
+  let opened = await curPage();
+  R.excalidrawOpens = opened.title === `diagram-${name}` && opened.shapes.length === 3 && opened.strokes.length === 1 && opened.texts.length === 1;
+  const arrowShape = opened.shapes.find((s) => s.kind === 'arrow');
+  R.excalidrawKeepsBinding = !!arrowShape?.bindStart && !!arrowShape?.bindEnd;
+  R.excalidrawKeepsFill = opened.shapes.find((s) => s.kind === 'rect').fillColor === '#ffec99';
+  // Save this page as .excalidraw and read it back.
+  await p.locator('[aria-label="Export"]').click();
+  await p.waitForTimeout(250);
+  const [exDl] = await Promise.all([p.waitForEvent('download'), p.getByText('Save page as .excalidraw').click()]);
+  const saved = JSON.parse(fs.readFileSync(await exDl.path(), 'utf8'));
+  R.excalidrawSaves = saved.type === 'excalidraw' && exDl.suggestedFilename().endsWith('.excalidraw');
+  R.excalidrawSavedElements = ['rectangle', 'ellipse', 'arrow', 'freedraw', 'text'].every((ty) => saved.elements.some((x) => x.type === ty));
+  const file2 = `${(await import('node:os')).tmpdir()}/saved-${name}.excalidraw`;
+  fs.writeFileSync(file2, JSON.stringify(saved));
+  await p.keyboard.press('Escape');
+  await p.locator('[aria-label="Insert"]').click();
+  const [chooser2] = await Promise.all([p.waitForEvent('filechooser'), p.locator('.menu .menu-item', { hasText: 'Excalidraw' }).click()]);
+  await chooser2.setFiles(file2);
+  await p.waitForTimeout(800);
+  opened = await curPage();
+  R.excalidrawRoundTrip = opened.shapes.length === 3 && opened.strokes.length === 1 && opened.texts.length === 1 && !!opened.shapes.find((s) => s.kind === 'arrow').bindStart;
+
   R.noErrors = errors.length === 0;
   await browser.close();
   console.log(`${name}: ${Object.values(R).every(Boolean) ? 'ok' : 'FAIL'}`);

@@ -140,6 +140,36 @@ async function exportPng(raw: Page, paper: boolean) {
   return download(blob, fileName(p.title, 'png'));
 }
 
+/** The page as an Excalidraw file (see excalidraw-format.ts). */
+async function exportExcalidraw(p: Page) {
+  const pictures = new Map<string, { dataUrl: string; mime: string }>();
+  for (const im of p.images) {
+    const blob = await blobOf(im.blob);
+    if (!blob) continue;
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+    pictures.set(im.blob, { dataUrl, mime: blob.type || 'image/png' });
+  }
+  const { toExcalidraw } = await import('./excalidraw-format');
+  const bg = pageColor(p.pageColor);
+  const doc = toExcalidraw({
+    strokes: p.strokes,
+    texts: p.texts,
+    shapes: p.shapes ?? [],
+    images: p.images,
+    pictures,
+    background: /^#[\da-f]{6}$/i.test(bg) ? bg : '#ffffff',
+  });
+  return download(
+    new Blob([JSON.stringify(doc)], { type: 'application/json' }),
+    fileName(p.title, 'excalidraw'),
+  );
+}
+
 /** The page as an SVG file (see svg-export.ts). */
 async function exportSvg(raw: Page, paper: boolean) {
   const p = withCode(raw);
@@ -331,6 +361,7 @@ async function exportPdf(
     const shapeMap = shapesById(shapeList);
     for (const sh of shapeList) {
       const col = toRgb(inkColor(sh.color, dark));
+      const fillCol = toRgb(inkColor(sh.fillColor ?? sh.color, dark));
       const at = { x: ox - b.x * scale, y: pageH - (oy - b.y * scale) };
       const dash = dashArray(sh.dash, sh.width);
       if (isBox(sh) && sh.fill === 'hatch') {
@@ -339,7 +370,7 @@ async function exportPdf(
             start: { x: at.x + a.x * scale, y: at.y - a.y * scale },
             end: { x: at.x + z.x * scale, y: at.y - z.y * scale },
             thickness: Math.max(1, sh.width * 0.6) * scale,
-            color: col,
+            color: fillCol,
             opacity: sh.opacity,
           });
         }
@@ -348,7 +379,9 @@ async function exportPdf(
       pg.drawSvgPath(shapeSvgPath(sh, shapeMap), {
         ...at,
         scale,
-        ...(filled ? { color: col, opacity: sh.opacity * (sh.fill === 'tint' ? 0.18 : 1) } : {}),
+        ...(filled
+          ? { color: fillCol, opacity: sh.opacity * (sh.fill === 'tint' ? 0.18 : 1) }
+          : {}),
         borderColor: col,
         borderWidth: sh.width * scale,
         borderOpacity: sh.opacity,
@@ -683,6 +716,22 @@ function panel(): HTMLElement {
       h('span', {}, 'Print-friendly (white paper, black ink)'),
     ),
     go,
+    h(
+      'button',
+      {
+        class: 'menu-item',
+        title: 'Shapes, arrows, ink, text and pictures, for Excalidraw (and its Obsidian plugin)',
+        onclick: async () => {
+          try {
+            if (await exportExcalidraw(page()))
+              toast(IN_DESKTOP_APP ? 'Saved.' : 'Saved — check your Downloads folder.', 3000);
+          } catch (e) {
+            toast(`Export failed: ${e instanceof Error ? e.message : e}`, 6000);
+          }
+        },
+      },
+      'Save page as .excalidraw',
+    ),
   );
   refresh();
   return el;

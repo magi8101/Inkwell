@@ -19,6 +19,7 @@ import {
 } from './bundle';
 import { addCodeBlock } from './code';
 import { h, icon, openMenu, toast } from './dom';
+import { importExcalidraw, isExcalidraw } from './excalidraw';
 import { storePicture } from './images';
 import { insert, takeOverPaste } from './lasso';
 import { importMarkdown, isMarkdown } from './markdown';
@@ -82,6 +83,17 @@ oneInput.addEventListener('change', async () => {
   oneInput.value = '';
 });
 const isOneNote = (f: File) => /\.one$/i.test(f.name);
+const exInput = h('input', {
+  type: 'file',
+  accept: '.excalidraw,application/json',
+  multiple: true,
+  hidden: true,
+});
+document.body.append(exInput);
+exInput.addEventListener('change', async () => {
+  for (const f of [...(exInput.files ?? [])]) await importExcalidraw(f);
+  exInput.value = '';
+});
 const zipInput = h('input', { type: 'file', accept: '.zip,application/zip', hidden: true });
 const folderInput = h('input', { type: 'file', webkitdirectory: true, hidden: true });
 document.body.append(zipInput, folderInput);
@@ -170,6 +182,7 @@ insertButton.addEventListener('click', () =>
     'sep',
     { label: 'PDF (to write on)…', icon: FileText, run: () => pdfInput.click() },
     { label: 'Markdown file (.md)…', icon: FileType, run: () => mdInput.click() },
+    { label: 'Excalidraw drawing (.excalidraw)…', icon: Shapes, run: () => exInput.click() },
     { label: 'Zip file (notes, PDFs, pictures)…', icon: FileArchive, run: () => zipInput.click() },
     ...(/Android/.test(navigator.userAgent)
       ? []
@@ -211,7 +224,10 @@ stage.addEventListener('drop', (e) => {
     for (const f of files.filter(isOneNote)) await importOneNote(f);
     for (const f of files.filter(isPdf)) await importPdf(f);
     await importMarkdown(files.filter(isMarkdown));
-    const pictures = files.filter((f) => !isOneNote(f) && !isPdf(f) && !isMarkdown(f));
+    for (const f of files.filter(isExcalidraw)) await importExcalidraw(f);
+    const pictures = files.filter(
+      (f) => !isOneNote(f) && !isPdf(f) && !isMarkdown(f) && !isExcalidraw(f),
+    );
     if (pictures.length) await addPictures(pictures, toWorld(e.clientX, e.clientY));
   })();
 });

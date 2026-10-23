@@ -17,6 +17,7 @@ function drawShape(
   dark: boolean,
 ) {
   const color = inkColor(s.color, dark);
+  const fillColor = inkColor(s.fillColor ?? s.color, dark);
   c.save();
   c.lineWidth = s.width;
   c.lineCap = 'round';
@@ -57,6 +58,7 @@ function drawShape(
   };
   if (s.fill === 'tint' || s.fill === 'solid') {
     c.save();
+    c.fillStyle = fillColor;
     c.translate(s.cx, s.cy);
     c.rotate(s.angle);
     c.globalAlpha = s.opacity * (s.fill === 'tint' ? 0.18 : 1);
@@ -66,6 +68,7 @@ function drawShape(
   } else if (s.fill === 'hatch') {
     // Hatch lines are worked out already clipped to the shape (world coordinates).
     c.globalAlpha = s.opacity;
+    c.strokeStyle = fillColor;
     c.lineWidth = Math.max(1, s.width * 0.6);
     c.beginPath();
     for (const [p, q] of hatch(s, Math.max(7, s.width * 3.5))) {
@@ -74,6 +77,7 @@ function drawShape(
     }
     c.stroke();
     c.lineWidth = s.width;
+    c.strokeStyle = color;
   }
   c.translate(s.cx, s.cy);
   c.rotate(s.angle);

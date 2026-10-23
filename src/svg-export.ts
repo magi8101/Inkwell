@@ -86,6 +86,7 @@ export async function pageToSvg(
   const map = byId(shapes);
   for (const s of shapes) {
     const col = inkColor(s.color, dark);
+    const fillCol = inkColor(s.fillColor ?? s.color, dark);
     const dash = dashArray(s.dash, s.width);
     const common = `stroke="${col}" stroke-width="${num(s.width)}" stroke-linecap="round" stroke-linejoin="round"${dash.length ? ` stroke-dasharray="${dash.map(num).join(' ')}"` : ''} opacity="${num(s.opacity)}"`;
     if (isBox(s) && s.fill === 'hatch') {
@@ -93,12 +94,12 @@ export async function pageToSvg(
         .map(([a, b]) => `M${num(a.x)} ${num(a.y)} L${num(b.x)} ${num(b.y)}`)
         .join(' ');
       out.push(
-        `<path d="${d}" fill="none" stroke="${col}" stroke-width="${num(Math.max(1, s.width * 0.6))}" opacity="${num(s.opacity)}"/>`,
+        `<path d="${d}" fill="none" stroke="${fillCol}" stroke-width="${num(Math.max(1, s.width * 0.6))}" opacity="${num(s.opacity)}"/>`,
       );
     }
     const fill =
       isBox(s) && (s.fill === 'tint' || s.fill === 'solid')
-        ? `fill="${col}" fill-opacity="${s.fill === 'tint' ? 0.18 : 1}"`
+        ? `fill="${fillCol}" fill-opacity="${s.fill === 'tint' ? 0.18 : 1}"`
         : 'fill="none"';
     out.push(`<path d="${shapeSvgPath(s, map)}" ${fill} ${common}/>`);
   }

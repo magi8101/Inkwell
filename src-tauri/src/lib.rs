@@ -240,13 +240,20 @@ async fn vault_remove(app: tauri::AppHandle, path: &str) -> Result<(), String> {
 
 /// Turns off `WebView2`'s pinch zoom, which scaled the whole app on a touchscreen instead of
 /// letting the page zoom the canvas (as it does in Edge). The setting applies from the next
-/// navigation, so the page is reloaded once at startup.
+/// navigation, so the page is reloaded once. That must wait until the app's own page has finished
+/// loading: reloading during startup (0.2.3 did, from the setup hook) can replace the page that
+/// is still loading with an empty one, leaving a black window.
 #[cfg(windows)]
 #[allow(unsafe_code)] // COM calls into WebView2; the interfaces come from wry's live controller
-fn no_pinch_zoom(window: &tauri::WebviewWindow) {
+fn no_pinch_zoom(webview: &tauri::Webview) {
+    use std::sync::atomic::{AtomicBool, Ordering};
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings5;
     use windows_core::Interface;
-    let _ = window.with_webview(|w| {
+    static DONE: AtomicBool = AtomicBool::new(false);
+    if DONE.swap(true, Ordering::SeqCst) {
+        return; // the reload this causes finishes loading too: don't go round again
+    }
+    let _ = webview.with_webview(|w| {
         // SAFETY: the controller is valid for the duration of this callback, on the UI thread.
         let done = unsafe {
             w.controller()
@@ -328,16 +335,22 @@ pub fn run() {
             vault_mkdir,
             vault_remove
         ])
-        .setup(|app| {
+        .on_page_load(|webview, payload| {
             #[cfg(windows)]
-            if let Some(w) = app.get_webview_window("main") {
-                no_pinch_zoom(&w);
+            if payload.event() == tauri::webview::PageLoadEvent::Finished
+                && payload.url().scheme() != "about"
+            {
+                no_pinch_zoom(webview);
             }
+            #[cfg(not(windows))]
+            let _ = (webview, payload);
+        })
+        .setup(|app| {
             #[cfg(target_os = "linux")]
             if let Some(w) = app.get_webview_window("main") {
                 pen_bridge(&w);
             }
-            #[cfg(not(any(windows, target_os = "linux")))]
+            #[cfg(not(target_os = "linux"))]
             let _ = app;
             Ok(())
         })

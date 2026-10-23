@@ -9,6 +9,7 @@ import {
   svgPath as shapeSvgPath,
   byId as shapesById,
 } from './shape-geom';
+import { openShareDialog } from './share';
 import { codeAsText, isBox, notebook, type Page, page, sheetOf } from './store';
 import { bbox, type FONTS, fontCss, inkColor, LINE_HEIGHT, svgPath, wrapLines } from './stroke';
 import { isTemplate, type Template, templateLines } from './template-lines';
@@ -541,6 +542,15 @@ function markdownPanel(p: Page): HTMLElement {
       },
       'Save as PDF',
     ),
+    h(
+      'button',
+      {
+        class: 'menu-item',
+        title: 'An encrypted link that opens this page for viewing only',
+        onclick: openShareDialog,
+      },
+      'Share a read-only link…',
+    ),
   );
 }
 
@@ -731,6 +741,15 @@ function panel(): HTMLElement {
         },
       },
       'Save page as .excalidraw',
+    ),
+    h(
+      'button',
+      {
+        class: 'menu-item',
+        title: 'An encrypted link that opens this page for viewing only',
+        onclick: openShareDialog,
+      },
+      'Share a read-only link…',
     ),
   );
   refresh();

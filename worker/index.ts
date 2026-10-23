@@ -8,8 +8,11 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { download } from './download';
+import { type ShareEnv, share } from './share';
 
-interface Env {
+export { ShareStore } from './share';
+
+interface Env extends ShareEnv {
   LIVE: DurableObjectNamespace<LiveSession>;
   ASSETS: Fetcher;
   AI: Ai;
@@ -31,6 +34,8 @@ export default {
       }
       return env.LIVE.get(env.LIVE.idFromName(code)).fetch(req);
     }
+    const shared = await share(req, env, url.pathname);
+    if (shared) return shared;
     if (url.pathname === '/api/ocr') return readHandwriting(req, env);
     if (url.pathname === '/download' || url.pathname.startsWith('/download/')) return download(req);
     return env.ASSETS.fetch(req);

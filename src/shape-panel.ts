@@ -92,20 +92,29 @@ export function shapePanel(): HTMLElement {
       'Shape',
       KINDS,
       () => state.shapeKind,
-      (v) => update((s) => void (s.shapeKind = v)),
+      (v) =>
+        update((s) => {
+          s.shapeKind = v;
+        }),
       'five',
     ),
     ...group(
       'Fill',
       FILLS,
       () => state.shapeFill,
-      (v) => update((s) => void (s.shapeFill = v)),
+      (v) =>
+        update((s) => {
+          s.shapeFill = v;
+        }),
     ),
     ...group(
       'Line',
       DASHES,
       () => state.shapeDash,
-      (v) => update((s) => void (s.shapeDash = v)),
+      (v) =>
+        update((s) => {
+          s.shapeDash = v;
+        }),
       'three',
     ),
     h(

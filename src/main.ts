@@ -42,6 +42,7 @@ import './text';
 import './markdown';
 import './ink-index';
 import './update';
+import './share';
 import { setTool } from './toolbar';
 import { openTuning, tuneButton } from './tune';
 import { actualSize, fitContent, penNear, resetView, zoomBy } from './viewport';

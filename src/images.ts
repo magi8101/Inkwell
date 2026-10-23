@@ -53,6 +53,16 @@ export function bitmap(id: string): Decoded | null {
   return null;
 }
 
+/** Decodes a picture kept in memory only (a shared page being viewed) and returns an id that
+ *  `bitmap()` finds, without writing anything to the device's storage. */
+export async function holdPicture(blob: Blob): Promise<string> {
+  const id = `held-${uid()}`;
+  decoded.set(id, await decode(blob));
+  imagesVersion++;
+  for (const l of loadedListeners) l();
+  return id;
+}
+
 /** Waits until every picture on these pages is decoded (for export). */
 export async function loadAll(pages: Page[]) {
   const ids = [

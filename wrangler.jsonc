@@ -13,7 +13,14 @@
   // Workers AI (free daily allowance): reads handwriting for "Convert to text" when the user opts in.
   "ai": { "binding": "AI" },
   "durable_objects": {
-    "bindings": [{ "name": "LIVE", "class_name": "LiveSession" }]
+    "bindings": [
+      { "name": "LIVE", "class_name": "LiveSession" },
+      // Read-only share links: encrypted pages, stored for 30 days (worker/share.ts).
+      { "name": "SHARE", "class_name": "ShareStore" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveSession"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["LiveSession"] },
+    { "tag": "v2", "new_sqlite_classes": ["ShareStore"] }
+  ]
 }

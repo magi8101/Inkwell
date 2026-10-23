@@ -284,7 +284,7 @@ const boxCache = new WeakMap<
   { texts: Page['texts']; images: Page['images']; shapes: Page['shapes']; box: number[] | null }
 >();
 /** World-space box around the page's ink and text, or null for an empty page. */
-function contentBox(p: Page): number[] | null {
+export function contentBox(p: Page): number[] | null {
   const hit = boxCache.get(p.strokes);
   if (hit && hit.texts === p.texts && hit.images === p.images && hit.shapes === p.shapes)
     return hit.box;

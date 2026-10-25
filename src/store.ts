@@ -239,6 +239,9 @@ export interface Tuning {
    * off (0 = smoothing is the same at every speed). Set by the calibration's fast lines.
    */
   speedGain: number;
+  /** The pressure range this pen really reaches: reported pressure is stretched from [Lo, Hi] to 0..1. */
+  pressureLo: number;
+  pressureHi: number;
   /** The first this-many samples of a pen stroke take the pressure the stroke settles at (0 = off). */
   startWarmup: number;
   /** Read each page's handwriting on this device in the background so search can find it. */
@@ -249,6 +252,8 @@ export const DEFAULT_TUNING: Tuning = {
   smoothing: 0.75,
   speedGain: 0,
   startWarmup: 0,
+  pressureLo: 0,
+  pressureHi: 1,
   thinning: 0.55,
   pressureGamma: 1,
   palmPx: 100,

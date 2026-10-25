@@ -1,3 +1,4 @@
+import { follow, speedAt } from './capture-filter';
 import { capture, h } from './dom';
 import { predict, type Sample } from './predict';
 import { densify, recognize } from './shape';
@@ -389,7 +390,12 @@ function samplesOf(e: PointerEvent): { ev: PointerEvent; p: number }[] {
       : [...list]
     : [e];
   const fallback = e.pressure > 0 ? e.pressure : 0.5;
-  return evs.map((ev) => ({ ev, p: ev.pressure > 0 ? ev.pressure : fallback }));
+  // Stretch this pen's real pressure range to 0..1 (calibration; identity until calibrated).
+  const { pressureLo: lo, pressureHi: hi } = state.tuning;
+  const span = Math.max(0.05, hi - lo);
+  const norm = (p: number) =>
+    lo === 0 && hi === 1 ? p : Math.min(1, Math.max(0, (p - lo) / span));
+  return evs.map((ev) => ({ ev, p: norm(ev.pressure > 0 ? ev.pressure : fallback) }));
 }
 
 function addRaw(a: Gesture, samples: { ev: PointerEvent; p: number }[]) {
@@ -521,15 +527,6 @@ function textTouches(t: TextBox, x: number, y: number, r: number) {
 
 const STALE_MS = 250;
 
-/** Pen speed in px/ms over its last few raw samples (0 when unknown). */
-function penSpeed(a: Gesture) {
-  const r = a.raw;
-  const last = r[r.length - 1];
-  const first = r[Math.max(0, r.length - 4)];
-  if (!last || !first || last.t <= first.t) return 0;
-  return Math.hypot(last.x - first.x, last.y - first.y) / (last.t - first.t);
-}
-
 function addPoints(a: Gesture, e: PointerEvent) {
   a.lastAt = performance.now();
   if (a.shape) return; // snapped: the clean shape stays until the pen lifts
@@ -555,7 +552,7 @@ function addPoints(a: Gesture, e: PointerEvent) {
       }
       // Smooth once here so the saved stroke renders the same forever, even after erasing.
       // Faster pen, less smoothing (speedGain, from calibration; 0 = the same at every speed).
-      const k = Math.min(1, state.tuning.smoothing + state.tuning.speedGain * penSpeed(a));
+      const k = follow(state.tuning, speedAt(a.raw));
       const sx = a.points[n - 3]! + (w.x - a.points[n - 3]!) * k;
       const sy = a.points[n - 2]! + (w.y - a.points[n - 2]!) * k;
       if (Math.hypot(sx - a.points[n - 3]!, sy - a.points[n - 2]!) < 0.2) continue;

@@ -699,7 +699,7 @@ async function suite() {
   R.calibrationSetsPressure = tuning.thinning !== 0.55 || tuning.pressureGamma !== 1;
   R.calibrationSetsPrediction = tuning.predictAuto === false;
   R.calibrationFindsStartSpike = tuning.startWarmup === 3;
-  R.calibrationSetsSpeedGain = tuning.speedGain > 0;
+  R.calibrationFitsFilter = tuning.smoothing !== 0.75 || tuning.speedGain > 0;
   R.calibrationReport = report.includes('DELAY (stylus → screen)') && report.includes('CALIBRATION (applied)');
   // The raw input log saw the simulated pen (down and hover) and touches.
   R.calibrationRawInput = /pointerdown pen ×\d/.test(report) && /pointermove pen hover ×\d/.test(report) && /pointerdown touch ×\d/.test(report);
@@ -714,7 +714,7 @@ async function suite() {
   for (const [i, pt] of spiked.slice(1).entries()) ev('pointermove', ...pt, { p: i + 1 < 3 ? 0.95 : 0.35 });
   ev('pointerup', ...spiked.at(-1), { p: 0.35 });
   const spikedPts = (await pg()).strokes.at(-1).points;
-  R.startFixFlattensSpike = [2, 5, 8].every((k) => Math.abs(spikedPts[k] - 0.35) < 0.02);
+  R.startFixFlattensSpike = [2, 5, 8].every((k) => Math.abs(spikedPts[k] - spikedPts[11]) < 0.02);
   // A Markdown note exports as PDF pages: capture the file the export hands to the browser.
   let pdfBlob = null;
   const realCreate = URL.createObjectURL.bind(URL);

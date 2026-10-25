@@ -1,16 +1,5 @@
 import { Gauge, X } from 'lucide';
-import {
-  bestPrediction,
-  fastLineFit,
-  median,
-  type PenSample,
-  palmThreshold,
-  percentile,
-  pressureFit,
-  sampleRate,
-  smoothingFromStill,
-  startWarmup,
-} from './calibration';
+import { fitSettings, median, type PenSample, sampleRate } from './calibration';
 import { capture, h, IS_MAC, icon, toast } from './dom';
 import { inkStats, inkTrailAvailable, lowLatencyCanvas, pressLog } from './ink';
 import { bridge } from './linux-pen';
@@ -156,63 +145,16 @@ interface Result {
 }
 
 function settingsFrom(m: Measurements): Result {
-  const patch: Partial<Tuning> = {};
-  const notes: string[] = [];
-  const still = smoothingFromStill(m.still.slice(Math.floor(m.still.length * 0.15)));
-  if (still) {
-    patch.smoothing = still.smoothing;
-    notes.push(`Sensor jitter ${still.noisePx.toFixed(2)} px → Follow ${still.smoothing}`);
-  }
-  const pf = pressureFit(
-    m.light.map((s) => s.p),
-    m.firm.map((s) => s.p),
-  );
-  if (pf) {
-    patch.thinning = pf.thinning;
-    patch.pressureGamma = pf.gamma;
-    notes.push(
-      `Pressure light ${pf.light.toFixed(2)}, firm ${pf.firm.toFixed(2)} → Pressure ${pf.thinning}, Curve ${pf.gamma}`,
-    );
-  } else if (m.light.length) {
-    notes.push('No usable pressure range detected — pressure settings left as they were');
-  }
-  const frame = m.frameMs.length ? median(m.frameMs) : inkStats.frameMs;
-  const pred = bestPrediction(m.fast, frame, 28);
-  if (pred) {
-    patch.prediction = pred.predictMs > 0;
-    patch.predictAuto = false;
-    patch.predictMs = pred.predictMs;
-    notes.push(
-      `Prediction ${pred.predictMs} ms: tip error ${pred.errorPx.toFixed(1)} px (vs ${pred.noPredictionErrorPx.toFixed(1)} px without)`,
-    );
-  }
-  // The stroke start and the speed behaviour come from every stroke drawn with the pen.
-  const all = [...m.fast, ...m.lines];
-  const warm = startWarmup(all);
-  if (warm !== null) {
-    patch.startWarmup = warm;
-    notes.push(
-      warm
-        ? `Pressure spike at the start of strokes (${warm} samples) → Start fix ${warm}`
-        : 'No pressure spike at the start of strokes → Start fix off',
-    );
-  }
-  const fl = fastLineFit(m.lines);
-  if (fl) {
-    patch.speedGain = fl.speedGain;
-    notes.push(
-      `Fast lines: wander ${fl.wobblePx.toFixed(2)} px at ${fl.speed.toFixed(1)} px/ms → Speed boost ${fl.speedGain}`,
-    );
-  }
-  const palm = palmThreshold(m.fingers, m.palms);
-  if (palm) {
-    patch.palmPx = palm;
-    notes.push(
-      `Finger ≈ ${Math.round(percentile(m.fingers, 0.9))} px, palm ≈ ${Math.round(median(m.palms))} px → Palm size ${palm} px`,
-    );
-  } else if (m.palms.length || m.fingers.length) {
-    notes.push('This screen does not report touch size — palms are rejected by pen proximity only');
-  }
+  const { patch, notes } = fitSettings({
+    still: m.still,
+    light: m.light,
+    firm: m.firm,
+    fast: m.fast,
+    lines: m.lines,
+    fingers: m.fingers,
+    palms: m.palms,
+    frame: m.frameMs.length ? median(m.frameMs) : inkStats.frameMs,
+  });
   // Hover and buttons are reported, not changed: a skipped step doesn't prove the pen lacks them.
   return { patch, notes };
 }
@@ -533,7 +475,15 @@ export function openCalibration() {
     if (e.pointerType === 'pen' && (e.button === 2 || e.buttons & 2)) m.sideButton = true;
     if (e.pointerType === 'pen' && (e.button === 5 || e.buttons & 32)) m.eraserEnd = true;
     if (e.tiltX || e.tiltY) m.tilt = true;
-    if (e.pointerType === 'touch') {
+    // A stylus with a rubber tip (no pressure, no pen type) reaches the browser as a finger. With no
+    // real pen seen, a touch in a drawing step is that stylus: measure it like a pen (flat pressure).
+    const drawStep = step.guide === 'dot' || step.guide === 'line' || step.guide === 'ring';
+    const stylusAsTouch =
+      e.pointerType === 'touch' &&
+      drawStep &&
+      (m.penType === 'none' || m.penType.startsWith('touch'));
+    if (stylusAsTouch) m.penType = 'touch (rubber-tip stylus)';
+    if (e.pointerType === 'touch' && !stylusAsTouch) {
       const sz = Math.max(e.width, e.height);
       if (step.guide === 'palm') m.palms.push(sz);
       if (step.guide === 'finger') m.fingers.push(sz);
@@ -560,7 +510,7 @@ export function openCalibration() {
       }
       return;
     }
-    if (e.pointerType === 'touch' && e.buttons) {
+    if (e.pointerType === 'touch' && e.buttons && e.pointerId !== downId) {
       const sz = Math.max(e.width, e.height);
       if (step.guide === 'palm') m.palms.push(sz);
       progress();

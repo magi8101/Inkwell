@@ -1,6 +1,7 @@
 // Calibration maths: turns what the user's pen actually did during the calibration steps into
 // settings. Pure functions (no DOM), so they're checked in calibration.check.ts.
 
+import { type FilterParams, smoothRun } from './capture-filter.ts';
 import { predict } from './predict.ts';
 
 export interface PenSample {
@@ -137,10 +138,12 @@ export function startWarmup(strokes: readonly (readonly PenSample[])[]): number 
   const counts: number[] = [];
   for (const s of strokes) {
     if (s.length < 14) continue;
-    const settled = median(s.slice(6, 12).map((q) => q.p));
+    // Pressure usually climbs as a stroke starts, so a spike is a start that is above everything the
+    // next few samples reach, not above their median.
+    const settled = Math.max(...s.slice(6, 12).map((q) => q.p));
     if (!(settled > 0.05)) continue; // no pressure reported
     let k = 0;
-    while (k < 6 && s[k]!.p > settled * 1.4 + 0.05) k++;
+    while (k < 6 && s[k]!.p > settled + 0.08) k++;
     counts.push(k);
   }
   return counts.length >= 4 ? Math.round(median(counts)) : null;
@@ -189,4 +192,298 @@ export function palmThreshold(fingers: readonly number[], palms: readonly number
   if (finger <= 2 && palm <= 2) return null; // sizes not reported (all 1×1)
   const cut = palm > finger * 1.3 ? (finger + palm) / 2 : finger * 1.6;
   return Math.round(clamp(cut, 40, 300) / 5) * 5;
+}
+
+// --- Fitting the capture filter from the user's own fast lines and circles ---
+
+/** Least-squares circle through points (Kåsa fit), or null when they are not round enough. */
+function fitCircle(pts: readonly { x: number; y: number }[]) {
+  const n = pts.length;
+  if (n < 12) return null;
+  let sx = 0;
+  let sy = 0;
+  for (const p of pts) {
+    sx += p.x;
+    sy += p.y;
+  }
+  const mx = sx / n;
+  const my = sy / n;
+  let suu = 0;
+  let svv = 0;
+  let suv = 0;
+  let suuu = 0;
+  let svvv = 0;
+  let suvv = 0;
+  let svuu = 0;
+  for (const p of pts) {
+    const u = p.x - mx;
+    const v = p.y - my;
+    suu += u * u;
+    svv += v * v;
+    suv += u * v;
+    suuu += u * u * u;
+    svvv += v * v * v;
+    suvv += u * v * v;
+    svuu += v * u * u;
+  }
+  const det = suu * svv - suv * suv;
+  if (Math.abs(det) < 1e-6) return null;
+  const uc = ((suuu + suvv) * svv - (svvv + svuu) * suv) / (2 * det);
+  const vc = ((svvv + svuu) * suu - (suuu + suvv) * suv) / (2 * det);
+  const r = Math.sqrt(uc * uc + vc * vc + (suu + svv) / n);
+  return r > 30 ? { cx: mx + uc, cy: my + vc, r } : null;
+}
+
+/** The stroke's intended shape: a chord for a line, the fitted circle for a ring. */
+function ideal(s: readonly PenSample[], kind: 'line' | 'ring' | 'free') {
+  if (kind === 'free') return () => 0; // no known shape: only the lag counts
+  if (kind === 'ring') {
+    const c = fitCircle(s);
+    return c ? (x: number, y: number) => Math.abs(Math.hypot(x - c.cx, y - c.cy) - c.r) : null;
+  }
+  const a = s[0]!;
+  const b = s[s.length - 1]!;
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len < 150) return null;
+  return (x: number, y: number) =>
+    Math.abs((b.x - a.x) * (a.y - y) - (a.x - x) * (b.y - a.y)) / len;
+}
+
+/** One stroke's cost for these filter settings: wander off the intended shape plus lag, in px. */
+function strokeCost(s: readonly PenSample[], kind: 'line' | 'ring' | 'free', p: FilterParams) {
+  const off = ideal(s, kind);
+  if (!off) return null;
+  const out = smoothRun(s, p);
+  if (out.length < 8) return null;
+  let wander = 0;
+  let lag = 0;
+  for (let j = 1; j < out.length - 1; j++) {
+    const o = out[j]!;
+    wander += off(o.x, o.y) ** 2;
+    // Lag: how far the raw pen is ahead of the smoothed point, along the direction of travel.
+    const a = out[j - 1]!;
+    const b = out[j + 1]!;
+    const dl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const r = s[o.i]!;
+    lag += ((r.x - o.x) * (b.x - a.x) + (r.y - o.y) * (b.y - a.y)) / dl;
+  }
+  const m = out.length - 2;
+  return Math.sqrt(wander / m) + Math.max(0, lag / m);
+}
+
+/** A flat run of samples split into strokes wherever the pen was off the screen for a moment. */
+export function splitStrokes(samples: readonly PenSample[], gapMs = 150): PenSample[][] {
+  const out: PenSample[][] = [];
+  let cur: PenSample[] = [];
+  for (const q of samples) {
+    const last = cur[cur.length - 1];
+    if (last && (q.t < last.t || q.t - last.t > gapMs)) {
+      out.push(cur);
+      cur = [];
+    }
+    cur.push(q);
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+/** Noise left in a held-still pen after smoothing, px RMS around where it really was. */
+function stillCost(s: readonly PenSample[], p: FilterParams) {
+  if (s.length < 15) return null;
+  const mx = s.reduce((a, q) => a + q.x, 0) / s.length;
+  const my = s.reduce((a, q) => a + q.y, 0) / s.length;
+  const out = smoothRun(s, p);
+  let sum = 0;
+  for (const o of out) sum += (o.x - mx) ** 2 + (o.y - my) ** 2;
+  return Math.sqrt(sum / out.length);
+}
+
+/**
+ * Searches smoothing and speed gain for the least wander + lag. Three kinds of evidence, since
+ * smoothing is cheap at a standstill and costly when fast: fast lines and rings (wander off the
+ * intended shape plus lag; the shape is a chord or a fitted circle, so no outside truth is needed),
+ * ordinary writing (lag only, at natural speed) and the held-still pen (noise left over).
+ * Returns null without enough fast strokes.
+ */
+export function fitFilter(
+  lines: readonly (readonly PenSample[])[],
+  rings: readonly (readonly PenSample[])[],
+  writing: readonly (readonly PenSample[])[] = [],
+  still: readonly PenSample[] = [],
+): (FilterParams & { cost: number; baseCost: number }) | null {
+  const fast = [
+    ...lines.map((s) => ({ s, kind: 'line' as const })),
+    ...rings.map((s) => ({ s, kind: 'ring' as const })),
+  ].filter((x) => x.s.length >= 12);
+  if (fast.length < 3) return null;
+  const slow = writing.filter((s) => s.length >= 12).map((s) => ({ s, kind: 'free' as const }));
+  const mean = (
+    set: { s: readonly PenSample[]; kind: 'line' | 'ring' | 'free' }[],
+    p: FilterParams,
+  ) => {
+    let sum = 0;
+    let n = 0;
+    for (const x of set) {
+      const c = strokeCost(x.s, x.kind, p);
+      if (c !== null) {
+        sum += c;
+        n++;
+      }
+    }
+    return n ? sum / n : null;
+  };
+  const cost = (p: FilterParams) => {
+    const a = mean(fast, p);
+    if (a === null) return Number.NaN;
+    return a + (mean(slow, p) ?? 0) + (stillCost(still, p) ?? 0);
+  };
+  let best: (FilterParams & { cost: number }) | null = null;
+  for (let sm = 0.3; sm <= 1.0001; sm += 0.05) {
+    for (let g = 0; g <= 1.0001; g += 0.05) {
+      const p = { smoothing: Math.round(sm * 20) / 20, speedGain: Math.round(g * 20) / 20 };
+      const c = cost(p);
+      if (Number.isFinite(c) && (!best || c < best.cost - 1e-9)) best = { ...p, cost: c };
+    }
+  }
+  const baseCost = cost({ smoothing: 0.75, speedGain: 0 });
+  return best && Number.isFinite(baseCost) ? { ...best, baseCost } : null;
+}
+
+// --- Pressure range ---
+
+/**
+ * The pressure range this pen really reaches (3rd to 95th percentile of everything it reported; the top is lower so a few spikes can't stretch it),
+ * so the full width range is usable even if the pen tops out at 0.6 or starts at 0.3. Null when the
+ * pen reports (almost) no pressure variation.
+ */
+export function pressureRange(values: readonly number[]): { lo: number; hi: number } | null {
+  if (values.length < 60) return null;
+  const lo = percentile(values, 0.03);
+  const hi = percentile(values, 0.95);
+  return hi - lo >= 0.08
+    ? { lo: Math.round(lo * 100) / 100, hi: Math.round(hi * 100) / 100 }
+    : null;
+}
+
+/** A pen that only ever reports a few distinct pressure levels (a clone's two levels) has none. */
+export function pressureLevels(values: readonly number[]): number {
+  return new Set(values.map((v) => Math.round(v * 25))).size;
+}
+
+// --- Everything together ---
+
+export interface FitData {
+  still: PenSample[];
+  light: PenSample[];
+  firm: PenSample[];
+  /** Fast circles, one entry per stroke. */
+  fast: PenSample[][];
+  /** Fast straight lines, one entry per stroke. */
+  lines: PenSample[][];
+  fingers: number[];
+  palms: number[];
+  /** Display frame time, ms. */
+  frame: number;
+}
+
+export interface FitPatch {
+  smoothing?: number;
+  speedGain?: number;
+  startWarmup?: number;
+  thinning?: number;
+  pressureGamma?: number;
+  pressureLo?: number;
+  pressureHi?: number;
+  prediction?: boolean;
+  predictAuto?: boolean;
+  predictMs?: number;
+  palmPx?: number;
+}
+
+/** Turns what the pen did in every calibration step into settings, with a line saying why. */
+export function fitSettings(d: FitData): { patch: FitPatch; notes: string[] } {
+  const patch: FitPatch = {};
+  const notes: string[] = [];
+  const strokes = [...d.fast, ...d.lines];
+
+  // Stroke starts: a pressure spike on the first samples draws a blob.
+  const warm = startWarmup(strokes);
+  if (warm !== null) {
+    patch.startWarmup = warm;
+    notes.push(
+      warm
+        ? `Pressure spike at the start of strokes (${warm} samples) → Start fix ${warm}`
+        : 'No pressure spike at the start of strokes → Start fix off',
+    );
+  }
+
+  // Pressure: this pen's real range, then width from how light and firm writing compare in it.
+  const settled = [
+    ...d.light.map((q) => q.p),
+    ...d.firm.map((q) => q.p),
+    ...strokes.flatMap((st) => st.slice(6).map((q) => q.p)),
+  ];
+  if (pressureLevels(settled) <= 3 && settled.length >= 60) {
+    patch.thinning = 0;
+    notes.push('Pressure takes only a couple of levels (not real pressure) → even line width');
+  } else {
+    const range = pressureRange(settled);
+    if (range) {
+      patch.pressureLo = range.lo;
+      patch.pressureHi = range.hi;
+      notes.push(`Pressure range ${range.lo}–${range.hi} → stretched to the full width range`);
+      const norm = (q: PenSample) => clamp((q.p - range.lo) / (range.hi - range.lo), 0, 1);
+      const pf = pressureFit(d.light.map(norm), d.firm.map(norm));
+      if (pf) {
+        patch.thinning = pf.thinning;
+        patch.pressureGamma = pf.gamma;
+        notes.push(`Pressure → Pressure ${pf.thinning}, Curve ${pf.gamma}`);
+      }
+    } else if (d.light.length) {
+      notes.push('No usable pressure range detected — pressure settings left as they were');
+    }
+  }
+
+  // Smoothing and speed: searched on the user's own fast strokes; the held-still jitter is the
+  // fallback when there are not enough of them.
+  const fit = fitFilter(
+    d.lines,
+    d.fast,
+    [...splitStrokes(d.light), ...splitStrokes(d.firm)],
+    d.still.slice(Math.floor(d.still.length * 0.15)),
+  );
+  if (fit) {
+    patch.smoothing = fit.smoothing;
+    patch.speedGain = fit.speedGain;
+    notes.push(
+      `Fast strokes: wander + lag ${fit.baseCost.toFixed(2)} → ${fit.cost.toFixed(2)} px → Follow ${fit.smoothing}, Speed boost ${fit.speedGain}`,
+    );
+  } else {
+    const still = smoothingFromStill(d.still.slice(Math.floor(d.still.length * 0.15)));
+    if (still) {
+      patch.smoothing = still.smoothing;
+      notes.push(`Sensor jitter ${still.noisePx.toFixed(2)} px → Follow ${still.smoothing}`);
+    }
+  }
+
+  const pred = bestPrediction(d.fast, d.frame, 28);
+  if (pred) {
+    patch.prediction = pred.predictMs > 0;
+    patch.predictAuto = false;
+    patch.predictMs = pred.predictMs;
+    notes.push(
+      `Prediction ${pred.predictMs} ms: tip error ${pred.errorPx.toFixed(1)} px (vs ${pred.noPredictionErrorPx.toFixed(1)} px without)`,
+    );
+  }
+
+  const palm = palmThreshold(d.fingers, d.palms);
+  if (palm) {
+    patch.palmPx = palm;
+    notes.push(
+      `Finger ≈ ${Math.round(percentile(d.fingers, 0.9))} px, palm ≈ ${Math.round(median(d.palms))} px → Palm size ${palm} px`,
+    );
+  } else if (d.palms.length || d.fingers.length) {
+    notes.push('This screen does not report touch size — palms are rejected by pen proximity only');
+  }
+  return { patch, notes };
 }

@@ -2,11 +2,14 @@
 // file per page for strokes. Reads and writes whole files in memory; pure, no DOM, so it runs in the
 // browser, the desktop app and Node.
 
-import { strToU8, unzipSync, type Zippable, zipSync } from 'fflate';
+import { strToU8, type Zippable, zipSync } from 'fflate';
+import { isLocked, lock, unlock } from './backup.ts';
 import { decodeStrokes, encodeStrokes, InkwError } from './inkw-codec.ts';
+import { badEntryName, DEFAULT_LIMITS, type InkwLimits, readZip } from './inkw-zip.ts';
 import type { Stroke } from './store.ts';
 
 export { InkwError } from './inkw-codec.ts';
+export type { InkwLimits } from './inkw-zip.ts';
 
 export const INKW_MIME = 'application/vnd.inkwell.notebook+zip';
 const FORMAT = 'inkw';
@@ -51,19 +54,6 @@ const hex = (b: ArrayBuffer) =>
 export const sha256 = async (b: Uint8Array) =>
   hex(await crypto.subtle.digest('SHA-256', b as BufferSource));
 const json = (v: unknown) => strToU8(JSON.stringify(v));
-
-/** An entry name that could escape its folder or mean something else on some OS. */
-export function badEntryName(name: string): boolean {
-  return (
-    name === '' ||
-    name.startsWith('/') ||
-    name.startsWith('\\') ||
-    /^[A-Za-z]:/.test(name) ||
-    name.includes('\\') ||
-    name.split('/').some((p) => p === '..' || p === '.') ||
-    name.includes('\0')
-  );
-}
 
 /** The document as a .inkw file. Damaged strokes are left out and counted. */
 export async function writeInkw(d: InkwData): Promise<{ bytes: Uint8Array; skipped: number }> {
@@ -120,13 +110,13 @@ function parse(bytes: Uint8Array, what: string): Record<string, unknown> {
 }
 
 /** A .inkw file as a document. Throws InkwError for anything that is not a valid file. */
-export async function readInkw(bytes: Uint8Array): Promise<InkwData> {
-  let entries: Record<string, Uint8Array>;
-  try {
-    entries = unzipSync(bytes);
-  } catch {
-    throw new InkwError('format', 'Not an Inkwell file');
-  }
+export async function readInkw(
+  bytes: Uint8Array,
+  limits: Partial<InkwLimits> = {},
+): Promise<InkwData> {
+  if (isInkwLocked(bytes))
+    throw new InkwError('password', 'This file is locked: it needs its password');
+  const entries = readZip(bytes, { ...DEFAULT_LIMITS, ...limits });
   const mime = entries.mimetype;
   if (!mime || new TextDecoder().decode(mime) !== INKW_MIME)
     throw new InkwError('format', 'Not an Inkwell file');
@@ -201,4 +191,32 @@ export async function readInkw(bytes: Uint8Array): Promise<InkwData> {
   for (const [name, b] of Object.entries(entries))
     if (!known.has(name)) data.unknownEntries[name] = b;
   return data;
+}
+
+// --- Locking: the same wrapper as backups (backup.ts) with its own magic ---
+
+const LOCK_MAGIC = strToU8('INKWLK1\0');
+export const isInkwLocked = (bytes: Uint8Array) => isLocked(bytes, LOCK_MAGIC);
+
+export async function writeInkwLocked(
+  d: InkwData,
+  password: string,
+): Promise<{ bytes: Uint8Array; skipped: number }> {
+  const { bytes, skipped } = await writeInkw(d);
+  return { bytes: await lock(bytes, password, LOCK_MAGIC), skipped };
+}
+
+export async function readInkwLocked(
+  bytes: Uint8Array,
+  password: string,
+  limits: Partial<InkwLimits> = {},
+): Promise<InkwData> {
+  let zip: Uint8Array;
+  try {
+    zip = await unlock(bytes, password, LOCK_MAGIC);
+  } catch (e) {
+    if (!isInkwLocked(bytes)) throw new InkwError('format', 'Not an Inkwell file');
+    throw new InkwError('password', (e as Error).message);
+  }
+  return readInkw(zip, limits);
 }

@@ -66,8 +66,8 @@ export function unpackBackup(bytes: Uint8Array): { doc: BackupDoc; pictures: Bac
   return { doc, pictures };
 }
 
-export const isLocked = (bytes: Uint8Array) =>
-  bytes.length > MAGIC.length && MAGIC.every((b, i) => bytes[i] === b);
+export const isLocked = (bytes: Uint8Array, magic: Uint8Array = MAGIC) =>
+  bytes.length > magic.length && magic.every((b, i) => bytes[i] === b);
 
 async function keyFrom(password: string, salt: Uint8Array) {
   const base = await crypto.subtle.importKey('raw', strToU8(password), 'PBKDF2', false, [
@@ -82,7 +82,11 @@ async function keyFrom(password: string, salt: Uint8Array) {
   );
 }
 
-export async function lock(zip: Uint8Array, password: string): Promise<Uint8Array> {
+export async function lock(
+  zip: Uint8Array,
+  password: string,
+  magic: Uint8Array = MAGIC,
+): Promise<Uint8Array> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await keyFrom(password, salt);
@@ -93,26 +97,30 @@ export async function lock(zip: Uint8Array, password: string): Promise<Uint8Arra
       zip as BufferSource,
     ),
   );
-  const out = new Uint8Array(MAGIC.length + 16 + 12 + body.length);
-  out.set(MAGIC);
-  out.set(salt, MAGIC.length);
-  out.set(iv, MAGIC.length + 16);
-  out.set(body, MAGIC.length + 28);
+  const out = new Uint8Array(magic.length + 16 + 12 + body.length);
+  out.set(magic);
+  out.set(salt, magic.length);
+  out.set(iv, magic.length + 16);
+  out.set(body, magic.length + 28);
   return out;
 }
 
 /** Throws "Wrong password" when the password is wrong or the file was changed. */
-export async function unlock(file: Uint8Array, password: string): Promise<Uint8Array> {
-  if (!isLocked(file)) throw new Error('Not a locked Inkwell backup');
-  const salt = file.slice(MAGIC.length, MAGIC.length + 16);
-  const iv = file.slice(MAGIC.length + 16, MAGIC.length + 28);
+export async function unlock(
+  file: Uint8Array,
+  password: string,
+  magic: Uint8Array = MAGIC,
+): Promise<Uint8Array> {
+  if (!isLocked(file, magic)) throw new Error('Not a locked Inkwell backup');
+  const salt = file.slice(magic.length, magic.length + 16);
+  const iv = file.slice(magic.length + 16, magic.length + 28);
   const key = await keyFrom(password, salt);
   try {
     return new Uint8Array(
       await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv: iv as BufferSource },
         key,
-        file.slice(MAGIC.length + 28) as BufferSource,
+        file.slice(magic.length + 28) as BufferSource,
       ),
     );
   } catch {

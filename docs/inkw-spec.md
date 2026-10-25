@@ -88,7 +88,7 @@ is `(n << 1) ^ (n >> 31)`.
 file    = "INKS" · version u8 (= 1) · stroke_count varint · stroke*
 stroke  = id_len varint · id (UTF-8) · tool u8 · flags u8 · rgb[3] · width varint ·
           opacity u8 · channels u8 · n varint · point*
-tool    = 0 pen | 1 highlighter | other values reserved
+tool    = 0 pen | 1 highlighter | other values reserved (a reader MUST refuse the page)
 flags   = bit 0: pressure is real (not simulated); other bits MUST be written as 0
 rgb     = the stroke colour, one byte per channel
 width   = stroke width in 1/16 px
@@ -105,8 +105,10 @@ With `X_i = round(x_i * 64)` and `Y_i = round(y_i * 64)` (1/64 px), `X_-1 = X_-2
 
 Rounding to 1/64 px moves a point by at most 1/128 px. A reader MUST reject a file whose counts do
 not fit in the remaining bytes, whose varints exceed 5 bytes, or whose version it does not know.
-A stroke with non-finite coordinates cannot be written; a writer MUST leave it out and SHOULD tell
-the user how many were left out.
+A stroke with non-finite coordinates, coordinates beyond 4,000,000 px, a colour that is not
+`#rrggbb`, or a point list that is not a multiple of 3 numbers cannot be written; a writer MUST
+leave it out and SHOULD tell the user how many were left out. A stroke id that is not a valid id
+MUST be rewritten (other characters become `_`, cut to 56 characters, made unique with `-1`, `-2`...).
 
 **Worked example.** One pen stroke, id `s1`, colour `#1c1c1e`, width 2 px, opacity 1, real pressure,
 two points `(10, 20, 1.0)` and `(11, 20, 1.0)` is these 29 bytes:

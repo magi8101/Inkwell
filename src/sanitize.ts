@@ -92,6 +92,9 @@ export function cleanShape(v: unknown): Shape | null {
     fill: x.fill,
     ...(hex(x.fillColor) ? { fillColor: x.fillColor } : {}),
     dash: x.dash,
+    ...(typeof x.head === 'number' && Number.isFinite(x.head)
+      ? { head: Math.min(4, Math.max(0.3, x.head)) }
+      : {}),
     ...(id(x.bindStart) ? { bindStart: id(x.bindStart) } : {}),
     ...(id(x.bindEnd) ? { bindEnd: id(x.bindEnd) } : {}),
     ...(id(x.group) ? { group: id(x.group) } : {}),

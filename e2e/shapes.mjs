@@ -200,6 +200,19 @@ for (const [name, engine] of [['Chromium', chromium], ['Firefox', firefox], ['We
   const bytes = fs.readFileSync(path);
   R.pdfExports = bytes.slice(0, 5).toString() === '%PDF-' && bytes.length > 1500;
   if (name === 'Chromium') fs.copyFileSync(path, process.env.SHAPES_PDF ?? '/tmp/shapes-export.pdf');
+  // Arrow head size: the next arrow takes the chosen size, and the selection menu can change it.
+  await p.locator('[aria-label="Shapes"]').first().click();
+  await p.waitForTimeout(120);
+  await p.locator('.shape-panel [aria-label="Large"]').click();
+  await p.keyboard.press('Escape');
+  await pick('Arrow');
+  await drag(300, 780, 560, 780);
+  const bigArrow = (await shapes()).filter((s) => s.kind === 'arrow').at(-1);
+  R.arrowHeadSizeChosen = bigArrow?.head === 1.6;
+  await menu('Shape style', 'Huge arrow head');
+  R.arrowHeadSizeEdited = (await shapes()).filter((s) => s.kind === 'arrow').at(-1)?.head === 2.4;
+  await menu('Shape style', 'Normal arrow head');
+  R.arrowHeadSizeReset = (await shapes()).filter((s) => s.kind === 'arrow').at(-1)?.head === undefined;
   R.noErrors = errors.length === 0;
 
   await browser.close();

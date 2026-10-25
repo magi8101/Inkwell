@@ -867,6 +867,32 @@ function styleItems() {
     item('Dotted line', same('dash', 'dotted'), () =>
       editShapes((s) => ({ ...s, dash: 'dotted' })),
     ),
+    ...(lines.some((s) => s.kind === 'arrow')
+      ? [
+          'sep' as const,
+          ...(
+            [
+              ['Small arrow head', 0.6],
+              ['Normal arrow head', 1],
+              ['Large arrow head', 1.6],
+              ['Huge arrow head', 2.4],
+            ] as const
+          ).map(([label, k]) =>
+            item(
+              label,
+              lines.filter((s) => s.kind === 'arrow').every((s) => (s.head ?? 1) === k),
+              () =>
+                editShapes((s) =>
+                  s.kind === 'arrow'
+                    ? k === 1
+                      ? (({ head: _h, ...rest }) => rest as Shape)(s)
+                      : { ...s, head: k }
+                    : s,
+                ),
+            ),
+          ),
+        ]
+      : []),
     ...(lines.length
       ? [
           'sep' as const,

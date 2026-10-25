@@ -136,6 +136,12 @@ near(Math.hypot(h1.x - 100, h1.y), 20);
 near(h1.y, -h2.y);
 assert.ok(h1.x < 100);
 assert.ok(headSize({ width: 2 }) >= 12 && headSize({ width: 10 }) > headSize({ width: 2 }));
+assert.equal(
+  headSize({ width: 2, head: 2 }),
+  headSize({ width: 2 }) * 2,
+  'head size setting scales it',
+);
+assert.equal(headSize({ width: 2, head: 1 }), headSize({ width: 2 }), 'normal is unchanged');
 
 // Boxes include the stroke and the arrow head
 const bb = shapeBox(r, byId([r]));

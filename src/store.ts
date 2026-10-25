@@ -70,6 +70,8 @@ export interface Shape {
   /** The fill's own colour when it differs from the line's (from an Excalidraw file); else `color`. */
   fillColor?: string;
   dash: 'solid' | 'dashed' | 'dotted';
+  /** Arrow head size as a multiple of the normal one (1 when missing). */
+  head?: number;
   /** Shapes sharing a group are selected, moved and arranged together. */
   group?: string;
   /** A locked shape can't be selected, moved or erased until unlocked. */
@@ -296,6 +298,8 @@ export interface State {
   shapeKind: ShapeKind;
   shapeFill: Shape['fill'];
   shapeDash: Shape['dash'];
+  /** Arrow head size for the next arrow, as a multiple of the normal one. */
+  shapeHead: number;
   /** Concepts-style locks: stop two fingers (and the wheel) from zooming / rotating the page. */
   viewLock: { zoom: boolean; rotate: boolean };
   theme: 'system' | 'light' | 'dark';
@@ -409,6 +413,7 @@ function defaults(): State {
     shapeKind: 'rect',
     shapeFill: 'none',
     shapeDash: 'solid',
+    shapeHead: 1,
     viewLock: { zoom: false, rotate: false },
     theme: 'system',
     toolbar: { x: -1, y: 16, collapsed: false },

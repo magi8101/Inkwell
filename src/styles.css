@@ -1918,6 +1918,10 @@ button.twisty:hover {
 
 /* ---------- Shapes ---------- */
 
+.segmented.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .segmented.five {
   grid-template-columns: repeat(5, 1fr);
 }

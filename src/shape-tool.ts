@@ -72,7 +72,8 @@ function draft(a: Pt, b: Pt, shift: boolean): Shape {
       const ang = Math.round(Math.atan2(b.y - a.y, b.x - a.x) / step) * step;
       end = { x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len };
     }
-    return { ...base, kind, x1: a.x, y1: a.y, x2: end.x, y2: end.y };
+    const head = kind === 'arrow' && state.shapeHead !== 1 ? { head: state.shapeHead } : {};
+    return { ...base, ...head, kind, x1: a.x, y1: a.y, x2: end.x, y2: end.y };
   }
   let w = Math.abs(b.x - a.x);
   let h = Math.abs(b.y - a.y);

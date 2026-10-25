@@ -25,6 +25,13 @@ const DASHES: { id: Shape['dash']; label: string }[] = [
   { id: 'dotted', label: 'Dotted' },
 ];
 
+const HEADS: { id: string; label: string }[] = [
+  { id: '0.6', label: 'Small' },
+  { id: '1', label: 'Normal' },
+  { id: '1.6', label: 'Large' },
+  { id: '2.4', label: 'Huge' },
+];
+
 export function shapePanel(): HTMLElement {
   const group = <T extends string>(
     title: string,
@@ -116,6 +123,16 @@ export function shapePanel(): HTMLElement {
           s.shapeDash = v;
         }),
       'three',
+    ),
+    ...group(
+      'Arrow head',
+      HEADS,
+      () => String(state.shapeHead),
+      (v) =>
+        update((s) => {
+          s.shapeHead = Number(v);
+        }),
+      'four',
     ),
     h(
       'p',

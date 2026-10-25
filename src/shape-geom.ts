@@ -90,7 +90,9 @@ export function arrowHead(a: Pt, b: Pt, size: number): [Pt, Pt] {
     { x: b.x - size * Math.cos(ang + spread), y: b.y - size * Math.sin(ang + spread) },
   ];
 }
-export const headSize = (s: Pick<Shape, 'width'>) => Math.max(12, s.width * 4.5);
+/** Arrow head length: grows with the line width, times the shape's own size setting. */
+export const headSize = (s: Pick<Shape, 'width'> & { head?: number }) =>
+  Math.max(12, s.width * 4.5) * (s.head ?? 1);
 
 /** Bounding box [x0, y0, x1, y1] of a shape, with half its stroke width around it. */
 export function shapeBox(s: Shape, shapes: ById): [number, number, number, number] {

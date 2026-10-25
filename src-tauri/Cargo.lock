@@ -1769,7 +1769,7 @@ dependencies = [
 
 [[package]]
 name = "inkwell"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "gtk",
  "percent-encoding",

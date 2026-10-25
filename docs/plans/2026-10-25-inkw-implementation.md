@@ -87,8 +87,8 @@ Failure modes the spec implies but no task's own happy path covers, most likely 
 - Produces:
   - `interface InkwPage { id: string; strokes: Stroke[]; json: Record<string, unknown> }` (`json` = everything in `page.json`, unknown keys kept)
   - `interface InkwNotebook { id: string; json: Record<string, unknown> }`
-  - `interface InkwData { created: string; modified: string; generator: string; notebooks: InkwNotebook[]; pages: InkwPage[]; blobs: Map<string, { ext: string; bytes: Uint8Array }>; extra: Record<string, unknown>; unknownEntries: Record<string, Uint8Array>; warnings: string[] }`
-  - `writeInkw(data: InkwData): Promise<Uint8Array>` (async: SHA-256 of blobs is checked, not trusted: a blob key that is not the SHA-256 of its bytes throws `format`)
+  - `interface InkwData { created: string; modified: string; generator: string; notebooks: InkwNotebook[]; pages: InkwPage[]; blobs: Map<string, { ext: string; bytes: Uint8Array }>; extra: Record<string, unknown>; manifestRest: Record<string, unknown>; unknownEntries: Record<string, Uint8Array>; warnings: string[] }` (`manifestRest`: unknown top-level keys of `inkw.json`, kept for write-back)
+  - `writeInkw(data: InkwData): Promise<{ bytes: Uint8Array; skipped: number }>` (`skipped`: damaged strokes left out; async: SHA-256 of blobs is checked, not trusted: a blob key that is not the SHA-256 of its bytes throws `format`)
   - `readInkw(bytes: Uint8Array): Promise<InkwData>`
   - `const INKW_MIME = 'application/vnd.inkwell.notebook+zip'`
 
@@ -108,7 +108,7 @@ Failure modes the spec implies but no task's own happy path covers, most likely 
 
 **Interfaces:**
 - Consumes: Task 2.
-- Produces: `readInkw(bytes, limits?: Partial<InkwLimits>)`; `interface InkwLimits { entries: number; entryBytes: number; totalBytes: number }` with the spec defaults; `writeInkwLocked(data, password): Promise<Uint8Array>`; `readInkwLocked(bytes, password): Promise<InkwData>`; `isInkwLocked(bytes): boolean`. `backup.ts` gains an optional `magic` argument on `lock`, `unlock` and `isLocked` (default unchanged) so both file kinds share one implementation.
+- Produces: `readInkw(bytes, limits?: Partial<InkwLimits>)`; `interface InkwLimits { entries: number; entryBytes: number; totalBytes: number }` with the spec defaults; `writeInkwLocked(data, password): Promise<{ bytes: Uint8Array; skipped: number }>`; `readInkwLocked(bytes, password): Promise<InkwData>`; `isInkwLocked(bytes): boolean`. `backup.ts` gains an optional `magic` argument on `lock`, `unlock` and `isLocked` (default unchanged) so both file kinds share one implementation.
 
 - [ ] **Step 1: Write failing tests** (all in `inkw.check.ts`; small limits passed in so they run fast):
   - `rejectsPathTricks`: entry names `../x`, `/etc/x`, `a\..\b`, `C:\x` each throw `InkwError('format')`.

@@ -372,6 +372,8 @@ button:disabled {
 
 .style-panel {
   display: grid;
+  /* minmax(0, 1fr), not auto: one wide child (a text box's default width) must not stretch the panel. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   width: 264px;
 }
@@ -412,6 +414,10 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 8px;
+}
+
+.palette[hidden] {
+  display: none; /* display: grid would otherwise win over the hidden attribute */
 }
 
 .pal {
@@ -460,6 +466,7 @@ hex-color-picker[hidden] {
 
 .hex {
   flex: 1;
+  min-width: 0; /* an input's default width otherwise sets the row's minimum */
   height: 36px;
   padding: 0 10px;
   border: 1px solid var(--border);
@@ -1468,6 +1475,18 @@ button.twisty:hover {
     display: none;
   }
 
+  /* A soft shadow at whichever end has more tools to scroll to (hidden at the ends). */
+  #toolbar {
+    background:
+      linear-gradient(to right, var(--surface) 30%, transparent) left / 24px 100% no-repeat local,
+      linear-gradient(to left, var(--surface) 30%, transparent) right / 24px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.22), transparent) left / 12px 100%
+      no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.22), transparent) right / 12px 100%
+      no-repeat scroll,
+      var(--surface);
+  }
+
   #toolbar > * {
     flex-shrink: 0;
   }
@@ -2378,4 +2397,10 @@ body.md-page #zoom {
 .report-text {
   min-height: 220px;
   resize: vertical;
+}
+
+/* The Save and Password dialogs' main button is easy to tap, not a small pill. */
+.share-actions .primary {
+  flex: 1;
+  min-height: 40px;
 }

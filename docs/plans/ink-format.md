@@ -188,11 +188,26 @@ decoded goes through the same validators as live and shared pages (`src/sanitize
 - **Windows/Linux open-with** in Tauri is unconfirmed.
 - **Scope**: weeks of work, mostly phases 1, 2 and 4.
 
-## Decisions for the owner
+## Decisions (made 2026-10-25)
 
-1. Is `.inkw` acceptable (and the MIME type `application/vnd.inkwell.notebook+zip`)?
-2. ZIP first, SQLite only if phase 1 measurements demand it?
-3. Should a locked `.inkw` be v1 (reuses `backup.ts`) or wait?
+1. **Container: ZIP.** Chosen over SQLite and a custom container because it is the only option that
+   already works, unchanged, on every target this app runs on: the app's `fflate` is pure JavaScript
+   (no wasm, no special headers), and a sample `.inkw` made by it was verified to open with
+   `unzip`, Python's `zipfile` (with Unicode text intact) and `file(1)`, which reported the MIME type
+   `application/vnd.inkwell.notebook+zip` from the `mimetype` entry; and the app's zip reader read
+   the same file in Chromium, Firefox and WebKit (the Safari/iPad engine). Android WebView is
+   Chromium and the desktop apps run the same JavaScript.
+2. **Extension `.inkw`**, MIME `application/vnd.inkwell.notebook+zip`, subject to the registry
+   check in phase 0.
+3. **Password lock is in v1**: the scheme already exists and is tested in `src/backup.ts`.
+4. **SQLite is not adopted.** Its main advantage, incremental in-place saves, is not needed:
+   Inkwell's live storage stays IndexedDB and `.inkw` is a save/exchange file written whole. Its
+   costs land exactly on the targets that must not break: a wasm dependency, OPFS modes with header
+   and single-tab limits, and iPad limits I could not find. Revisit only if phase 1 shows saving a
+   realistic notebook is too slow.
+5. **What stays reversible**: the schema and the stroke codec do not depend on the container, so a
+   later container change would not redo them. What is *not* reversible once files exist is the
+   version field and the reserved bits, which is why the spec is frozen in phase 0.
 
 ## Sources
 

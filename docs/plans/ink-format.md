@@ -218,3 +218,23 @@ decoded goes through the same validators as live and shared pages (`src/sanitize
 - `.ink` collisions: https://fileinfo.com/extension/ink and https://docs.fileformat.com/data/ink
 - Tauri mobile file associations: https://v2.tauri.app/learn/mobile-file-associations/
 - Deterministic CBOR drafts (considered, not used): https://datatracker.ietf.org/doc/html/draft-rundgren-deterministic-cbor-17
+
+## Status (2026-10-25): phases 0 to 3 are built
+
+- Spec frozen: `docs/inkw-spec.md` (registry check recorded there).
+- `src/inkw-codec.ts`, `src/inkw.ts`, `src/inkw-zip.ts` (a bounded reader that does not trust sizes
+  declared in the zip headers), `src/inkw-model.ts`, `src/notebook-clean.ts`; Save, Open, drop and
+  backups in the app (`src/inkw-ui.ts`).
+- Checked by `npm run check` (codec, container, hostile files, model, cross-language), by
+  `npm run e2e:inkw` (Chromium, Firefox, WebKit) and by a fuzz test that found and fixed one real
+  bug (invalid UTF-8 in a stroke id crashed the decoder). `INKW_FUZZ_SEED` and `INKW_FUZZ_N` run it
+  with other seeds; seven seeds and 20,000 iterations each found nothing further.
+- `tools/inkw.py` reads files with the Python standard library and agrees with the TypeScript reader.
+- **Measured** (`node scripts/inkw-measure.ts`, Node on the development machine, simulated strokes):
+  500 pages and 1,012,500 points: 7.9 MB with 4 MB of pictures, **3.88 bytes per point** (JSON today:
+  about 20), write 0.31 s, read 0.31 s. 2,500 pages and 5 million points: 23.6 MB, write 1.5 s, read
+  1.4 s. The SQLite fallback is **not** needed. Not measured: a phone or tablet, and the browser.
+- Not built, each its own plan because it needs real machines: OS file association and "open with"
+  (phase 4), converters from `.xopp` and to InkML and Wacom UIM (phase 5).
+- The repository has no test workflow (only `release.yml`), so the checks run locally with
+  `npm run check` and the e2e scripts; nothing was added to the release workflow.

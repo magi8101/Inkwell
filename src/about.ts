@@ -75,6 +75,10 @@ const ALGORITHMS: [string, string][] = [
     'Typed notes edited with Tiptap: Markdown shortcuts turn into formatting as you type, and the note is saved back as plain Markdown (read and written with marked), so .md files open and save unchanged.',
   ],
   [
+    'Inkwell files',
+    'A .inkw file is a zip: JSON for the notes and one compact file per page for strokes (each point is stored as a small change from the movement before it, about 4 bytes instead of 20), pictures stored once by their hash, optionally locked with AES-256.',
+  ],
+  [
     'Share links',
     'A page is compressed (gzip) and encrypted in your browser with AES-256-GCM. The server stores only the encrypted bytes; the key is in the link after the #, which browsers never send. Links are deleted after 30 days.',
   ],

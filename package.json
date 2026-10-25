@@ -23,6 +23,7 @@
     "e2e:files": "node e2e/files.mjs",
     "e2e:share": "node e2e/share.mjs",
     "e2e:backup": "node e2e/backup.mjs",
+    "e2e:inkw": "node e2e/inkw.mjs",
     "e2e:ink": "node e2e/ink-search.mjs",
     "release": "node scripts/release.mjs",
     "build:onenote": "cargo build --manifest-path onenote/Cargo.toml --release --target wasm32-unknown-unknown && cp onenote/target/wasm32-unknown-unknown/release/onenote_import.wasm src/onenote-import.wasm"

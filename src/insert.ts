@@ -21,6 +21,7 @@ import { addCodeBlock } from './code';
 import { h, icon, openMenu, toast } from './dom';
 import { importExcalidraw, isExcalidraw } from './excalidraw';
 import { storePicture } from './images';
+import { isInkwName, openInkw } from './inkw-ui';
 import { insert, takeOverPaste } from './lasso';
 import { importMarkdown, isMarkdown } from './markdown';
 import { importOneNote } from './onenote';
@@ -84,6 +85,13 @@ const only = (files: FileList | null, ext: RegExp, what: string) => {
   if (all.length && !ok.length) toast(`That is not ${what}.`, 3000);
   return ok;
 };
+// Inkwell files (.inkw): no `accept` (see above); the content decides what is a real one.
+const inkwInput = h('input', { type: 'file', multiple: true, hidden: true });
+document.body.append(inkwInput);
+inkwInput.addEventListener('change', async () => {
+  for (const f of [...(inkwInput.files ?? [])]) await openInkw(f);
+  inkwInput.value = '';
+});
 // OneNote sections (.one) open as a new, editable section; several at once each become one.
 const oneInput = h('input', { type: 'file', multiple: true, hidden: true });
 document.body.append(oneInput);
@@ -211,6 +219,7 @@ insertButton.addEventListener('click', () =>
         ]),
     { label: 'Code block (runs on Compiler Explorer)', icon: Code, run: () => void addCodeBlock() },
     { label: 'OneNote section (.one)…', icon: NotebookText, run: () => oneInput.click() },
+    { label: 'Inkwell file (.inkw)…', icon: FileArchive, run: () => inkwInput.click() },
   ]),
 );
 
@@ -237,12 +246,13 @@ stage.addEventListener('drop', (e) => {
       toast(`Couldn’t read that: ${(err as Error).message ?? err}`, 5000),
     );
   void (async () => {
+    for (const f of files.filter(isInkwName)) await openInkw(f);
     for (const f of files.filter(isOneNote)) await importOneNote(f);
     for (const f of files.filter(isPdf)) await importPdf(f);
     await importMarkdown(files.filter(isMarkdown));
     for (const f of files.filter(isExcalidraw)) await importExcalidraw(f);
     const pictures = files.filter(
-      (f) => !isOneNote(f) && !isPdf(f) && !isMarkdown(f) && !isExcalidraw(f),
+      (f) => !isInkwName(f) && !isOneNote(f) && !isPdf(f) && !isMarkdown(f) && !isExcalidraw(f),
     );
     if (pictures.length) await addPictures(pictures, toWorld(e.clientX, e.clientY));
   })();

@@ -551,6 +551,15 @@ function markdownPanel(p: Page): HTMLElement {
       },
       'Share a read-only link…',
     ),
+    h(
+      'button',
+      {
+        class: 'menu-item',
+        title: 'One file with pictures that opens in Inkwell on any device',
+        onclick: () => void import('./inkw-ui').then((m) => m.openSaveInkwDialog()),
+      },
+      'Save as .inkw (page, folder or notebook)…',
+    ),
   );
 }
 
@@ -750,6 +759,15 @@ function panel(): HTMLElement {
         onclick: openShareDialog,
       },
       'Share a read-only link…',
+    ),
+    h(
+      'button',
+      {
+        class: 'menu-item',
+        title: 'One file with pictures that opens in Inkwell on any device',
+        onclick: () => void import('./inkw-ui').then((m) => m.openSaveInkwDialog()),
+      },
+      'Save as .inkw (page, folder or notebook)…',
     ),
   );
   refresh();

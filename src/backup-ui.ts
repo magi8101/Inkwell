@@ -76,7 +76,11 @@ async function restoreFrom(file: File, password: () => Promise<string | null>) {
 }
 
 /** A small dialog asking for a password (optional when `optional`), resolving to it or null. */
-function askPassword(title: string, text: string, optional: boolean): Promise<string | null> {
+export function askPassword(
+  title: string,
+  text: string,
+  optional: boolean,
+): Promise<string | null> {
   return new Promise((resolve) => {
     const box = h('input', {
       class: 'share-url',

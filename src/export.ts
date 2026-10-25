@@ -99,7 +99,7 @@ const IN_DESKTOP_APP = '__TAURI_INTERNALS__' in window;
  * honour download links, so there it goes to a Rust command that shows the native "Save as"
  * dialog. Returns false if the user cancelled.
  */
-async function download(blob: Blob, name: string): Promise<boolean> {
+export async function download(blob: Blob, name: string): Promise<boolean> {
   if (IN_DESKTOP_APP) {
     const { invoke } = await import('@tauri-apps/api/core');
     const bytes = new Uint8Array(await blob.arrayBuffer());

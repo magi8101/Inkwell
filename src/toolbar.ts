@@ -248,6 +248,26 @@ function stylePanel(): HTMLElement {
     update((s) => {
       editStyle(s, tool, patch);
     });
+  // A colour chosen by hex, picker or eyedropper is kept in "Recent" (palette colours already have
+  // their own swatch).
+  // Added once the colour has settled: dragging in the picker passes through hundreds of them.
+  let settle = 0;
+  const setCustom = (color: string) => {
+    set({ color });
+    clearTimeout(settle);
+    if (PALETTE.includes(color)) return;
+    settle = window.setTimeout(
+      () =>
+        update((s) => {
+          s.recentColors = [color, ...(s.recentColors ?? []).filter((c) => c !== color)].slice(
+            0,
+            8,
+          );
+        }),
+      700,
+    );
+  };
+  const recent = h('div', { class: 'palette recent' });
 
   const preview = h('div', { class: 'stroke-preview' }, h('span'));
   const hex = h('input', {
@@ -280,7 +300,7 @@ function stylePanel(): HTMLElement {
       title: 'Pick a colour from the page',
       onclick: async () => {
         const c = await pickFromPage();
-        if (c) set({ color: stored(c) });
+        if (c) setCustom(stored(c));
       },
     },
     icon(Pipette, 18),
@@ -358,6 +378,19 @@ function stylePanel(): HTMLElement {
       b.style.setProperty('--c', shown(c));
       b.setAttribute('aria-pressed', String(c === s.color));
     }
+    recent.replaceChildren(
+      ...(state.recentColors ?? []).map((c) =>
+        h('button', {
+          class: 'pal',
+          style: `--c:${shown(c)}`,
+          'aria-label': `Recent colour ${colorName(c)}`,
+          title: `Recent: ${colorName(c)}`,
+          'aria-pressed': String(c === s.color),
+          onclick: () => set({ color: c }),
+        }),
+      ),
+    );
+    recent.hidden = !(state.recentColors ?? []).length;
     // Hex and picker show the colour as drawn, like the swatches (black reads white on dark pages).
     if (document.activeElement !== hex) hex.value = shown(s.color);
     hex.removeAttribute('aria-invalid');
@@ -373,11 +406,11 @@ function stylePanel(): HTMLElement {
 
   hex.addEventListener('input', () => {
     const m = HEX.exec(hex.value.trim());
-    if (m) set({ color: stored(`#${m[1]!.toLowerCase()}`) });
+    if (m) setCustom(stored(`#${m[1]!.toLowerCase()}`));
     else hex.setAttribute('aria-invalid', 'true');
   });
   hex.addEventListener('blur', refresh);
-  picker.addEventListener('color-changed', (e) => set({ color: stored(e.detail.value) }));
+  picker.addEventListener('color-changed', (e) => setCustom(stored(e.detail.value)));
   width.addEventListener('input', () => set({ width: Number(width.value) }));
   opacity.addEventListener('input', () => set({ opacity: Number(opacity.value) / 100 }));
 
@@ -387,6 +420,7 @@ function stylePanel(): HTMLElement {
     h('div', { class: 'panel-title' }, tool === 'pen' ? 'Pen' : 'Highlighter', hint),
     preview,
     h('div', { class: 'palette' }, ...swatches),
+    recent,
     h('div', { class: 'hex-row' }, custom, hex, eyedrop),
     picker,
     h('label', { class: 'slider' }, h('span', {}, 'Width'), width, widthOut),

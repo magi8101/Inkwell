@@ -1,6 +1,8 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { Info, X } from 'lucide';
+import { backUpEverything, restoreFromBackup } from './backup-ui';
 import { h, icon, SERVER } from './dom';
+import { openProblemReport } from './report';
 import { openShortcuts } from './shortcuts';
 
 // "About Inkwell": the version, and how the app works — every algorithm it uses, in plain words.
@@ -129,6 +131,20 @@ export function openAbout() {
             { class: 'cal-btn', onclick: () => openShortcuts() },
             'Keyboard shortcuts (?)',
           ),
+          ' ',
+          h(
+            'button',
+            { class: 'cal-btn', onclick: () => openProblemReport() },
+            'Report a problem…',
+          ),
+          ' ',
+          h(
+            'button',
+            { class: 'cal-btn', onclick: () => void backUpEverything() },
+            'Back up everything…',
+          ),
+          ' ',
+          h('button', { class: 'cal-btn', onclick: restoreFromBackup }, 'Restore from a backup…'),
         ),
         h('h2', { class: 'cal-title' }, 'How it works'),
         h(

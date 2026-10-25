@@ -284,6 +284,8 @@ export interface State {
   styles: Record<InkTool, Style>;
   eraserWidth: number;
   favorites: Favorite[];
+  /** Colours picked with the hex box, the picker or the eyedropper (newest first, at most 8). */
+  recentColors: string[];
   /** The favourite pen picked last. Editing the pen doesn't change it, unless it's a new pen. */
   activeFavorite: number | null;
   /**
@@ -408,6 +410,7 @@ function defaults(): State {
     },
     eraserWidth: 20,
     favorites: DEFAULT_FAVORITES.map((f) => ({ ...f })),
+    recentColors: [],
     activeFavorite: null,
     snap: true,
     shapeKind: 'rect',

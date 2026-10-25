@@ -1,7 +1,5 @@
 # `.inkw` Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Inkwell can save a page, folder or notebook to one `.inkw` file and open it again on any OS, the website included, and a stdlib-only Python reader can read the same files.
 
 **Architecture:** A ZIP container (built on `fflate`, already a dependency) holding JSON for the schema and one compact binary file per page for strokes. Two pure modules (`inkw-codec.ts`, `inkw.ts`) with no DOM are checked in Node; a mapping module and a small UI layer connect them to the app's storage; a Python script proves any other language can read it.
@@ -19,7 +17,7 @@
 - Stroke codec `strokes.bin`: `"INKS"` · version `u8 = 1` · stroke count varint · strokes; stroke = id length varint · id · tool `u8` (0 pen, 1 highlighter, others reserved) · flags `u8` (bit0 pressure real, other bits 0) · rgb[3] · width varint in 1/16 px · opacity `u8` (0..255) · channels `u8` (bit0 pressure, always set in v1; bits 1-2 reserved) · point count varint · points. Points: x and y as zigzag second-order deltas of values in 1/64 px (`X_-1 = X_-2 = 0`); pressure as zigzag first-order delta of 0..255 (`P_-1 = 0`). Varints are unsigned LEB128; zigzag is `(n << 1) ^ (n >> 31)`.
 - Lock: magic `INKWLK1\0` · salt(16) · iv(12) · AES-256-GCM(zip); key PBKDF2-SHA256, 250,000 rounds. Wrong password and damage both fail as "Wrong password".
 - Reader limits: at most 100,000 entries; 512 MB per entry and 4 GB total decompressed; reject names containing `..`, a leading `/` or `\`, a drive letter, or duplicates; ignore symlink attributes; reject counts that do not fit the remaining bytes.
-- Repo rules: `npx biome check .`, `npx tsc --noEmit` and `npm run check` stay green; new pure modules get a `*.check.ts` added to the `check` script in `package.json`; **no `Co-Authored-By` or any AI attribution in commits** (the owner's global rule); never commit agent config files.
+- Repo rules: `npx biome check .`, `npx tsc --noEmit` and `npm run check` stay green; new pure modules get a `*.check.ts` added to the `check` script in `package.json`.
 
 ## Review Focus
 

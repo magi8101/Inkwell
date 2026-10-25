@@ -168,7 +168,7 @@ decoded goes through the same validators as live and shared pages (`src/sanitize
 
 | | Work | Done when |
 |---|---|---|
-| 0 | Check `.inkw` against registries; read Wacom UIM's schema and Rnote's repository for ideas worth taking; freeze this spec | The spec is reviewed and the extension is cleared |
+| 0 (done 2026-10-25: `docs/inkw-spec.md`) | Check `.inkw` against registries; read Wacom UIM's schema and Rnote's repository for ideas worth taking; freeze this spec | The spec is reviewed and the extension is cleared |
 | 1 | `src/inkw.ts` writer and reader, `inkw.check.ts`, golden files | Round-trips every page type (ink, text, shapes, code, Markdown, pictures, templates, paper); every corrupted, truncated or hostile file (zip bomb, `..` path, bad varint, duplicate entry) is rejected without a crash or a hang; real-notebook size and speed measured |
 | 2 | Save / Open / backup in the app, locked and unlocked | A notebook saved on Linux opens on Windows, macOS, Android and the website |
 | 3 | Python reader and CLI; cross-language tests | TypeScript writes and Python reads, and the reverse, on the same golden files |

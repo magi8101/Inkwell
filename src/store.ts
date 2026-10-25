@@ -234,12 +234,21 @@ export interface Tuning {
    * and nothing here can tell which of two changes did that.
    */
   stylusTouchCancel: boolean;
+  /**
+   * Smoothing backs off by this much per px/ms of pen speed, so quick strokes don't lag or round
+   * off (0 = smoothing is the same at every speed). Set by the calibration's fast lines.
+   */
+  speedGain: number;
+  /** The first this-many samples of a pen stroke take the pressure the stroke settles at (0 = off). */
+  startWarmup: number;
   /** Read each page's handwriting on this device in the background so search can find it. */
   indexInk: boolean;
 }
 
 export const DEFAULT_TUNING: Tuning = {
   smoothing: 0.75,
+  speedGain: 0,
+  startWarmup: 0,
   thinning: 0.55,
   pressureGamma: 1,
   palmPx: 100,

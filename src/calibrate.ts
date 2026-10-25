@@ -1,6 +1,7 @@
 import { Gauge, X } from 'lucide';
 import {
   bestPrediction,
+  fastLineFit,
   median,
   type PenSample,
   palmThreshold,
@@ -8,6 +9,7 @@ import {
   pressureFit,
   sampleRate,
   smoothingFromStill,
+  startWarmup,
 } from './calibration';
 import { capture, h, IS_MAC, icon, toast } from './dom';
 import { inkStats, inkTrailAvailable, lowLatencyCanvas, pressLog } from './ink';
@@ -25,6 +27,8 @@ interface Measurements {
   light: PenSample[];
   firm: PenSample[];
   fast: PenSample[][];
+  /** Quick straight lines, one entry per stroke. */
+  lines: PenSample[][];
   palms: number[];
   fingers: number[];
   sideButton: boolean;
@@ -49,6 +53,8 @@ interface Step {
   text: string;
   guide: 'circle' | 'dot' | 'line' | 'ring' | 'palm' | 'finger' | 'buttons';
   optional?: boolean;
+  /** Which line step this is (the light and firm steps share the line guide). */
+  id?: 'light' | 'firm' | 'lines';
   /** Returns true once enough data has been collected. */
   done: (m: Measurements) => boolean;
 }
@@ -71,12 +77,14 @@ const STEPS: Step[] = [
     title: 'Light writing',
     text: 'Write a word along the line using a very light touch.',
     guide: 'line',
+    id: 'light',
     done: (m) => m.light.length >= 150,
   },
   {
     title: 'Firm writing',
     text: 'Now write it again, pressing firmly.',
     guide: 'line',
+    id: 'firm',
     done: (m) => m.firm.length >= 150,
   },
   {
@@ -84,6 +92,13 @@ const STEPS: Step[] = [
     text: 'Trace around the ring quickly a few times — as fast as you would write.',
     guide: 'ring',
     done: (m) => m.fast.reduce((n, s) => n + s.length, 0) >= 300,
+  },
+  {
+    title: 'Fast lines',
+    text: 'Draw quick straight lines along the line, left to right and back, as fast as you like. Do about six.',
+    guide: 'line',
+    id: 'lines',
+    done: (m) => m.lines.length >= 6,
   },
   {
     title: 'Palm',
@@ -116,6 +131,7 @@ function fresh(): Measurements {
     light: [],
     firm: [],
     fast: [],
+    lines: [],
     palms: [],
     fingers: [],
     sideButton: false,
@@ -168,6 +184,24 @@ function settingsFrom(m: Measurements): Result {
     patch.predictMs = pred.predictMs;
     notes.push(
       `Prediction ${pred.predictMs} ms: tip error ${pred.errorPx.toFixed(1)} px (vs ${pred.noPredictionErrorPx.toFixed(1)} px without)`,
+    );
+  }
+  // The stroke start and the speed behaviour come from every stroke drawn with the pen.
+  const all = [...m.fast, ...m.lines];
+  const warm = startWarmup(all);
+  if (warm !== null) {
+    patch.startWarmup = warm;
+    notes.push(
+      warm
+        ? `Pressure spike at the start of strokes (${warm} samples) → Start fix ${warm}`
+        : 'No pressure spike at the start of strokes → Start fix off',
+    );
+  }
+  const fl = fastLineFit(m.lines);
+  if (fl) {
+    patch.speedGain = fl.speedGain;
+    notes.push(
+      `Fast lines: wander ${fl.wobblePx.toFixed(2)} px at ${fl.speed.toFixed(1)} px/ms → Speed boost ${fl.speedGain}`,
     );
   }
   const palm = palmThreshold(m.fingers, m.palms);
@@ -545,7 +579,9 @@ export function openCalibration() {
     if (e.pointerId !== downId || !current) return;
     downId = -1;
     const step = STEPS[index];
-    if (step?.guide === 'line') (index === 2 ? m.light : m.firm).push(...current);
+    if (step?.id === 'light') m.light.push(...current);
+    else if (step?.id === 'firm') m.firm.push(...current);
+    else if (step?.id === 'lines' && current.length >= 8) m.lines.push(current);
     if (step?.guide === 'ring') m.fast.push(current);
     current = null;
     progress();
@@ -566,8 +602,9 @@ export function openCalibration() {
     if (step.guide === 'dot' && m.still.length) {
       return `Hold still… ${Math.min(2, (m.still.at(-1)!.t - m.still[0]!.t) / 1000).toFixed(1)} s`;
     }
+    if (step.id === 'lines') return `${m.lines.length} of 6 lines`;
     if (step.guide === 'line')
-      return `Keep writing… ${Math.min(100, Math.round(((index === 2 ? m.light : m.firm).length / 150) * 100))}%`;
+      return `Keep writing… ${Math.min(100, Math.round(((step.id === 'light' ? m.light : m.firm).length / 150) * 100))}%`;
     if (step.guide === 'ring')
       return `Keep going… ${Math.min(100, Math.round((m.fast.flat().length / 300) * 100))}%`;
     return '';

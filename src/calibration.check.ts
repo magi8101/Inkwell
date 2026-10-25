@@ -2,11 +2,13 @@
 import assert from 'node:assert/strict';
 import {
   bestPrediction,
+  fastLineFit,
   type PenSample,
   palmThreshold,
   pressureFit,
   sampleRate,
   smoothingFromStill,
+  startWarmup,
 } from './calibration.ts';
 
 let seed = 7;
@@ -68,3 +70,37 @@ assert.ok(
 assert.equal(palmThreshold([45, 50, 52, 48], [170, 190, 200]), 120);
 assert.equal(palmThreshold([1, 1, 1], [1, 1]), null);
 console.log('calibration checks passed');
+
+// A pen that reports a pressure spike for its first 3 samples: found. A clean pen: none.
+const stroke = (spike: number, n = 30): PenSample[] =>
+  Array.from({ length: n }, (_, i) => ({ x: i * 10, y: 0, t: i * 8, p: i < spike ? 0.95 : 0.35 }));
+assert.equal(
+  startWarmup(Array.from({ length: 5 }, () => stroke(3))),
+  3,
+  'spike of 3 samples found',
+);
+assert.equal(
+  startWarmup(Array.from({ length: 5 }, () => stroke(0))),
+  0,
+  'clean pen has no warm-up',
+);
+assert.equal(startWarmup([stroke(3), stroke(3)]), null, 'too few strokes to decide');
+assert.equal(
+  startWarmup(Array.from({ length: 5 }, () => stroke(3).map((s) => ({ ...s, p: 0 })))),
+  null,
+  'no pressure at all: nothing to fix',
+);
+
+// Fast straight lines: clean lines earn more speed gain than wobbly ones.
+const line = (wobble: number): PenSample[] =>
+  Array.from({ length: 40 }, (_, i) => ({
+    x: i * 12,
+    y: wobble * Math.sin(i * 2.1),
+    t: i * 8,
+    p: 0.4,
+  }));
+const clean = fastLineFit(Array.from({ length: 4 }, () => line(0.2)))!;
+const wobbly = fastLineFit(Array.from({ length: 4 }, () => line(3)))!;
+assert.ok(clean.speedGain > wobbly.speedGain, 'clean fast lines → higher speed gain');
+assert.ok(clean.speed > 1.4 && clean.speed < 1.6, 'speed in px/ms');
+assert.equal(fastLineFit([line(0.2), line(0.2)]), null, 'needs three lines');

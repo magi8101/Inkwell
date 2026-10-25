@@ -521,6 +521,15 @@ function textTouches(t: TextBox, x: number, y: number, r: number) {
 
 const STALE_MS = 250;
 
+/** Pen speed in px/ms over its last few raw samples (0 when unknown). */
+function penSpeed(a: Gesture) {
+  const r = a.raw;
+  const last = r[r.length - 1];
+  const first = r[Math.max(0, r.length - 4)];
+  if (!last || !first || last.t <= first.t) return 0;
+  return Math.hypot(last.x - first.x, last.y - first.y) / (last.t - first.t);
+}
+
 function addPoints(a: Gesture, e: PointerEvent) {
   a.lastAt = performance.now();
   if (a.shape) return; // snapped: the clean shape stays until the pen lifts
@@ -545,10 +554,16 @@ function addPoints(a: Gesture, e: PointerEvent) {
         continue;
       }
       // Smooth once here so the saved stroke renders the same forever, even after erasing.
-      const sx = a.points[n - 3]! + (w.x - a.points[n - 3]!) * state.tuning.smoothing;
-      const sy = a.points[n - 2]! + (w.y - a.points[n - 2]!) * state.tuning.smoothing;
+      // Faster pen, less smoothing (speedGain, from calibration; 0 = the same at every speed).
+      const k = Math.min(1, state.tuning.smoothing + state.tuning.speedGain * penSpeed(a));
+      const sx = a.points[n - 3]! + (w.x - a.points[n - 3]!) * k;
+      const sy = a.points[n - 2]! + (w.y - a.points[n - 2]!) * k;
       if (Math.hypot(sx - a.points[n - 3]!, sy - a.points[n - 2]!) < 0.2) continue;
       a.points.push(round(sx), round(sy), round(pr));
+      // A pressure spike in the first samples (a blob at the start) takes the settled pressure.
+      const warm = state.tuning.startWarmup;
+      if (warm && a.points.length === (warm + 1) * 3)
+        for (let i = 0; i < warm; i++) a.points[i * 3 + 2] = round(pr);
       continue;
     }
     if (a.mode === 'line') {

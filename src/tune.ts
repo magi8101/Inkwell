@@ -26,6 +26,22 @@ const SLIDERS: {
     hint: 'Lower smooths wobble but trails the pen; 1 is raw.',
   },
   {
+    key: 'speedGain',
+    label: 'Speed boost',
+    min: 0,
+    max: 0.4,
+    step: 0.05,
+    hint: 'Smoothing backs off when you write fast, so quick lines do not lag or round off. 0 = same smoothing at every speed.',
+  },
+  {
+    key: 'startWarmup',
+    label: 'Start fix',
+    min: 0,
+    max: 6,
+    step: 1,
+    hint: 'Some pens report a pressure spike at the start of a stroke (a blob). This many first samples take the pressure the stroke settles at.',
+  },
+  {
     key: 'thinning',
     label: 'Pressure',
     min: 0,

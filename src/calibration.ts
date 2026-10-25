@@ -128,6 +128,57 @@ export function bestPrediction(
 }
 
 /**
+ * Some pens (and Safari's first touch event) report a pressure spike for the first few samples of a
+ * stroke, which draws a fat blob at the start. Over the strokes drawn with this pen: how many
+ * leading samples are well above the pressure the stroke settles at. 0 means no spike (or no
+ * pressure at all). Needs several strokes, so one odd stroke doesn't decide.
+ */
+export function startWarmup(strokes: readonly (readonly PenSample[])[]): number | null {
+  const counts: number[] = [];
+  for (const s of strokes) {
+    if (s.length < 14) continue;
+    const settled = median(s.slice(6, 12).map((q) => q.p));
+    if (!(settled > 0.05)) continue; // no pressure reported
+    let k = 0;
+    while (k < 6 && s[k]!.p > settled * 1.4 + 0.05) k++;
+    counts.push(k);
+  }
+  return counts.length >= 4 ? Math.round(median(counts)) : null;
+}
+
+/**
+ * Quick straight lines: how far the pen wanders off the straight line (px RMS) and how fast it
+ * moves. Smoothing that hides jitter also makes fast strokes lag and round off, so the gain says
+ * how much the smoothing should back off per px/ms of speed: clean fast lines get more, wobbly
+ * ones less.
+ */
+export function fastLineFit(
+  lines: readonly (readonly PenSample[])[],
+): { wobblePx: number; speed: number; speedGain: number } | null {
+  const wobble: number[] = [];
+  const speed: number[] = [];
+  for (const s of lines) {
+    if (s.length < 8) continue;
+    const a = s[0]!;
+    const b = s[s.length - 1]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 150 || b.t <= a.t) continue;
+    let sum = 0;
+    for (let i = 1; i < s.length - 1; i++) {
+      const p = s[i]!;
+      const d = Math.abs((b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y)) / len;
+      sum += d * d;
+    }
+    wobble.push(Math.sqrt(sum / (s.length - 2)));
+    speed.push(len / (b.t - a.t));
+  }
+  if (wobble.length < 3) return null;
+  const wobblePx = median(wobble);
+  const gain = clamp(0.4 - wobblePx / 8, 0, 0.4);
+  return { wobblePx, speed: median(speed), speedGain: Math.round(gain * 20) / 20 };
+}
+
+/**
  * Palm threshold between the biggest fingertip and the smallest palm contact. Returns null when
  * the screen doesn't report contact sizes (then only pen proximity rejects palms).
  */

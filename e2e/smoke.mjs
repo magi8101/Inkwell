@@ -38,7 +38,7 @@ async function suite() {
         clientY: y,
         button: type === 'pointermove' ? -1 : (o.button ?? 0),
         buttons: type === 'pointerup' ? 0 : (o.buttons ?? 1),
-        pressure: 0.5,
+        pressure: o.p ?? 0.5,
         width: o.size ?? 1,
         height: o.size ?? 1,
         bubbles: true,
@@ -664,11 +664,23 @@ async function suite() {
   const ring = Array.from({ length: 320 }, (_, i) => at(0.5 + 0.3 * Math.cos(i / 20), 0.5 + 0.3 * Math.sin(i / 20)));
   await calStroke(ring, {}, 4); // 5. fast circles
   await step('6.');
-  for (let i = 0; i < 10; i++) calEv('pointerdown', at(0.5, 0.5), { type: 'touch', id: 900 + i, size: 180 }); // 6. palm
+  // 6. fast lines: straight, quick, and a pressure spike on the first three samples (a blob)
+  for (let n = 0; n < 6; n++) {
+    pid++;
+    const pts = Array.from({ length: 40 }, (_, i) => at(0.05 + i * 0.022, 0.6));
+    calEv('pointerdown', pts[0], { p: 0.95 });
+    for (const [i, pt] of pts.slice(1).entries()) {
+      calEv('pointermove', pt, { p: i + 1 < 3 ? 0.95 : 0.35 });
+      await wait(2);
+    }
+    calEv('pointerup', pts.at(-1), { p: 0.35 });
+  }
   await step('7.');
-  for (let i = 0; i < 3; i++) calEv('pointerdown', at(0.5, 0.5), { type: 'touch', id: 950 + i, size: 40 }); // 7. finger
+  for (let i = 0; i < 10; i++) calEv('pointerdown', at(0.5, 0.5), { type: 'touch', id: 900 + i, size: 180 }); // 7. palm
   await step('8.');
-  await calStroke([at(0.4, 0.4), at(0.41, 0.4)], { button: 2, buttons: 2 }); // 8. side button…
+  for (let i = 0; i < 3; i++) calEv('pointerdown', at(0.5, 0.5), { type: 'touch', id: 950 + i, size: 40 }); // 8. finger
+  await step('9.');
+  await calStroke([at(0.4, 0.4), at(0.41, 0.4)], { button: 2, buttons: 2 }); // 9. side button…
   await calStroke([at(0.4, 0.4), at(0.41, 0.4)], { button: 5, buttons: 32 }); // …and eraser end
   await step('done');
   R.calibrationFinishes = document.querySelector('.cal-title')?.textContent === 'Your pen is calibrated';
@@ -686,12 +698,23 @@ async function suite() {
   R.calibrationSetsPalm = tuning.palmPx === 110;
   R.calibrationSetsPressure = tuning.thinning !== 0.55 || tuning.pressureGamma !== 1;
   R.calibrationSetsPrediction = tuning.predictAuto === false;
+  R.calibrationFindsStartSpike = tuning.startWarmup === 3;
+  R.calibrationSetsSpeedGain = tuning.speedGain > 0;
   R.calibrationReport = report.includes('DELAY (stylus → screen)') && report.includes('CALIBRATION (applied)');
   // The raw input log saw the simulated pen (down and hover) and touches.
   R.calibrationRawInput = /pointerdown pen ×\d/.test(report) && /pointermove pen hover ×\d/.test(report) && /pointerdown touch ×\d/.test(report);
   if (!R.calibrationRawInput) console.log(report.split('RAW INPUT')[1]?.split('DELAY')[0]);
   document.querySelector('.cal-close').click();
   R.calibrationCloses = !document.querySelector('.cal-overlay');
+  // The calibrated start fix is used: a pressure spike on the first samples is flattened.
+  btn('Pen').click();
+  pid++;
+  const spiked = line(300, 700, 700, 700, 30);
+  ev('pointerdown', ...spiked[0], { p: 0.95 });
+  for (const [i, pt] of spiked.slice(1).entries()) ev('pointermove', ...pt, { p: i + 1 < 3 ? 0.95 : 0.35 });
+  ev('pointerup', ...spiked.at(-1), { p: 0.35 });
+  const spikedPts = (await pg()).strokes.at(-1).points;
+  R.startFixFlattensSpike = [2, 5, 8].every((k) => Math.abs(spikedPts[k] - 0.35) < 0.02);
   // A Markdown note exports as PDF pages: capture the file the export hands to the browser.
   let pdfBlob = null;
   const realCreate = URL.createObjectURL.bind(URL);

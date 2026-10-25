@@ -37,7 +37,7 @@ const ALGORITHMS: [string, string][] = [
   ],
   [
     'Pen calibration',
-    'Measures your own pen: how often it reports, sensor noise, pressure range, speed, palm size, buttons and delay, and turns that into settings.',
+    'Measures your own pen: how often it reports, sensor noise, pressure range, palm size, buttons and delay, plus quick straight lines (how much the line wanders, so smoothing can back off when you write fast) and any pressure spike at the start of a stroke (so it does not draw a blob), and turns that into settings.',
   ],
   [
     'Handwriting to text',

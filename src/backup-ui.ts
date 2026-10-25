@@ -1,45 +1,14 @@
 import { X } from 'lucide';
-import { isLocked, lock, packBackup, unlock, unpackBackup } from './backup';
+import { isLocked, unlock, unpackBackup } from './backup';
 import { h, icon, toast } from './dom';
-import { download } from './export';
-import { blobOf, storePicture } from './images';
+import { storePicture } from './images';
 import { cleanNotebooks } from './notebook-clean';
-import { type Notebook, state, uid, update } from './store';
+import { state, uid, update } from './store';
 
-// Back up everything to one file, and restore from one (backup.ts has the file format). Restoring
-// never replaces anything: the notebooks in the file are added next to yours, with fresh ids, and
-// everything in the file is checked on the way in.
-
-const stamp = () => new Date().toISOString().slice(0, 10);
-
-/** The ids of every picture the notebooks use (page pictures and picture backgrounds). */
-function pictureIds(notebooks: Notebook[]): string[] {
-  const ids = new Set<string>();
-  for (const nb of notebooks)
-    for (const s of nb.sections)
-      for (const p of s.pages) {
-        for (const im of p.images) ids.add(im.blob);
-        if (p.backdrop) ids.add(p.backdrop);
-      }
-  return [...ids];
-}
-
-async function makeBackup(password: string): Promise<Blob> {
-  const pictures = [];
-  for (const id of pictureIds(state.notebooks)) {
-    const b = await blobOf(id);
-    if (b)
-      pictures.push({
-        id,
-        type: b.type || 'image/png',
-        bytes: new Uint8Array(await b.arrayBuffer()),
-      });
-  }
-  // The strokes of a page can be large, and pages are plain data: copy what is saved.
-  let bytes = packBackup(structuredClone(state.notebooks), pictures);
-  if (password) bytes = await lock(bytes, password);
-  return new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
-}
+// Back up everything to one .inkw file, and restore from one. Old backups (.inkbackup, backup.ts)
+// still restore: files are told apart by their content, never their name. Restoring never replaces
+// anything: the notebooks in the file are added next to yours, with fresh ids, and everything in
+// the file is checked on the way in.
 
 async function restoreFrom(file: File, password: () => Promise<string | null>) {
   let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
@@ -131,21 +100,14 @@ export function askPassword(
 export async function backUpEverything() {
   const pw = await askPassword(
     'Back up everything',
-    'Saves every notebook, with its pictures, into one file. Type a password to lock it (there is no way to recover it), or leave it empty for an unlocked file.',
+    'Saves every notebook, with its pictures, into one .inkw file. Type a password to lock it (there is no way to recover it), or leave it empty for an unlocked file.',
     true,
   );
   if (pw === null) return;
-  toast('Making the backup…', 60_000);
-  try {
-    const blob = await makeBackup(pw);
-    if (await download(blob, `Inkwell backup ${stamp()}.inkbackup`))
-      toast(
-        `Backup saved (${(blob.size / 1e6).toFixed(1)} MB)${pw ? ', locked with your password' : ''}.`,
-        4000,
-      );
-  } catch (e) {
-    toast(`Backup failed: ${(e as Error).message}`, 6000);
-  }
+  // Everything goes to one .inkw file (the dialogs and the writer live in inkw-ui.ts, loaded here so the
+  // two modules do not depend on each other at start-up).
+  const { saveInkw } = await import('./inkw-ui');
+  await saveInkw('all', pw, 'Inkwell backup');
 }
 
 const picker = h('input', { type: 'file', hidden: true });
@@ -154,8 +116,13 @@ picker.addEventListener('change', async () => {
   const f = picker.files?.[0];
   picker.value = '';
   if (!f) return;
-  toast('Reading the backup…', 60_000);
   try {
+    const inkw = await import('./inkw-ui');
+    if (await inkw.sniffInkw(f)) {
+      await inkw.openInkw(f);
+      return;
+    }
+    toast('Reading the backup…', 60_000);
     await restoreFrom(f, () =>
       askPassword('Locked backup', 'This backup is locked. Type its password.', false),
     );

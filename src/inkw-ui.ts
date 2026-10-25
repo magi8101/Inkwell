@@ -72,7 +72,7 @@ const safeName = (s: string) =>
     .trim()
     .slice(0, 80) || 'Inkwell';
 
-export async function saveInkw(scope: Scope, password: string) {
+export async function saveInkw(scope: Scope, password: string, fileName?: string) {
   toast('Saving…', 60_000);
   try {
     const { name, notebooks } = pick(scope);
@@ -81,7 +81,7 @@ export async function saveInkw(scope: Scope, password: string) {
     const { bytes, skipped } = password
       ? await writeInkwLocked(doc, password)
       : await writeInkw(doc);
-    const file = `${safeName(name)} ${day()}.inkw`;
+    const file = `${safeName(fileName ?? name)} ${day()}.inkw`;
     if (await download(new Blob([bytes as BlobPart], { type: INKW_MIME }), file)) {
       const parts = [
         `Saved ${file} (${(bytes.length / 1e6).toFixed(1)} MB)${password ? ', locked' : ''}.`,

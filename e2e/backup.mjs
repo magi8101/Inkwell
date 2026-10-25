@@ -53,7 +53,7 @@ const backup = async (p, password) => {
   return path;
 };
 const plain = await backup(a, '');
-R.plainBackupNamed = plain.endsWith('.inkbackup');
+R.plainBackupNamed = plain.endsWith('.inkw');
 await a.keyboard.press('Escape');
 await a.reload();
 await a.waitForSelector('#toolbar .tb-btn');
@@ -111,6 +111,13 @@ const d = await open();
 await restore(d, locked, 'wrong');
 say('count wrong');
 R.wrongPasswordRestoresNothing = (await counts(d)).notebooks === 1;
+
+// A backup made before backups became .inkw files still restores (picked by content, not name).
+const e = await open();
+const legacyPath = new globalThis.URL('../docs/inkw-golden/legacy.inkbackup', import.meta.url).pathname;
+await restore(e, legacyPath);
+const afterLegacy = await counts(e);
+R.legacyBackupRestores = afterLegacy.notebooks === 2 && afterLegacy.strokes === 6;
 
 R.noErrors = errors.length === 0;
 console.log(R, errors);

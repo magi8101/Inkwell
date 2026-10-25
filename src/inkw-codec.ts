@@ -98,6 +98,15 @@ class Reader {
 
 const finite = (v: number) => Number.isFinite(v);
 
+/** Bytes to text; invalid UTF-8 is a damaged file, not a crash. */
+function utf8(b: Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(b);
+  } catch {
+    throw new InkwError('format', 'Not an Inkwell file: a name is damaged');
+  }
+}
+
 /** One stroke as bytes, or null when its data is damaged (a writer leaves such a stroke out). */
 function encodeOne(s: Stroke, id: string): Uint8Array | null {
   const n = s.points.length / 3;
@@ -191,7 +200,7 @@ export function decodeStrokes(bytes: Uint8Array): Stroke[] {
     throw new InkwError('format', 'Not an Inkwell file: stroke count too large');
   const out: Stroke[] = [];
   for (let i = 0; i < count; i++) {
-    const id = new TextDecoder('utf-8', { fatal: true }).decode(r.take(r.varint()));
+    const id = utf8(r.take(r.varint()));
     const toolIndex = r.u8();
     const tool = TOOLS[toolIndex];
     if (!tool)

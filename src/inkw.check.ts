@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deflateSync, zipSync } from 'fflate';
+import { deflateSync, unzipSync, zipSync } from 'fflate';
 import { packBackup } from './backup.ts';
 import {
   INKW_MIME,
@@ -15,8 +15,10 @@ import {
   writeInkw,
   writeInkwLocked,
 } from './inkw.ts';
+import { fromInkw } from './inkw-model.ts';
 import { plain, SAMPLE_PNG_HASH, sampleDocument } from './inkw-sample.ts';
 import { crc32 } from './inkw-zip.ts';
+import { rng } from './pen-sim.ts';
 
 const doc = () => sampleDocument(SAMPLE_PNG_HASH);
 const text = (b: Uint8Array, from: number, to: number) =>
@@ -391,5 +393,87 @@ assert.equal(
   await code(() => readInkwLocked(bytes, 'x')),
   'format',
   'unlocking an unlocked file is not a password problem',
+);
+
+// --- Fuzz: damaged files must be read or refused cleanly, never hang or crash ---
+
+const goldenBytes = new Uint8Array(readFileSync(join(golden, 'basic.inkw')));
+// A fixed seed keeps the committed run deterministic; INKW_FUZZ_SEED and INKW_FUZZ_N explore more.
+const random = rng(Number(process.env.INKW_FUZZ_SEED ?? 20261025));
+const FUZZ_N = Number(process.env.INKW_FUZZ_N ?? 1500);
+const pick = (n: number) => Math.floor(random.uniform() * n);
+function mutate(src: Uint8Array): Uint8Array {
+  const b = src.slice();
+  switch (pick(5)) {
+    case 0:
+      for (let k = 0, n = 1 + pick(8); k < n; k++) b[pick(b.length)] = pick(256);
+      return b;
+    case 1:
+      return b.slice(0, pick(b.length));
+    case 2: {
+      const at = pick(b.length);
+      const len = 1 + pick(Math.min(64, b.length - at));
+      const out = new Uint8Array(b.length + len);
+      out.set(b.slice(0, at + len));
+      out.set(b.slice(at, at + len), at + len);
+      out.set(b.slice(at + len), at + 2 * len);
+      return out;
+    }
+    case 3: {
+      const at = pick(b.length);
+      b.fill(0, at, Math.min(b.length, at + 16));
+      return b;
+    }
+    default:
+      b[pick(b.length)]! ^= 1 << pick(8);
+      return b;
+  }
+}
+async function survives(bytes: Uint8Array, label: string) {
+  const t = Date.now();
+  let opened = false;
+  try {
+    const data = await readInkw(bytes);
+    opened = true;
+    await fromInkw(
+      data,
+      (() => {
+        let n = 0;
+        return () => `f${++n}`;
+      })(),
+      async () => 'pic',
+      new Set(),
+    );
+  } catch (e) {
+    assert.ok(
+      e instanceof InkwError,
+      `${label}: not an InkwError: ${e instanceof Error ? `${e.name}: ${e.message}\n${e.stack}` : e}`,
+    );
+  }
+  assert.ok(Date.now() - t < 1000, `${label}: took ${Date.now() - t} ms`);
+  return opened;
+}
+
+// 1. Damage to the raw file: nearly always caught by the per-entry CRC.
+let opened = 0;
+for (let i = 0; i < FUZZ_N; i++)
+  if (await survives(mutate(goldenBytes), `raw mutation ${i}`)) opened++;
+
+// 2. Damage to what is inside, with valid CRCs, so the parsers themselves are exercised: the stroke
+// decoder, JSON handling and the importer's cleaning must cope with any content.
+const inner = unzipSync(goldenBytes);
+const targets = Object.keys(inner).filter((n) => n !== 'mimetype' && !n.startsWith('blobs/'));
+let innerOpened = 0;
+for (let i = 0; i < FUZZ_N; i++) {
+  const target = targets[pick(targets.length)]!;
+  const entries: RawEntry[] = Object.entries(inner).map(([name, data]) => ({
+    name,
+    data: name === target ? mutate(data) : data,
+    method: 8 as const,
+  }));
+  if (await survives(rawZip(entries), `content mutation ${i} (${target})`)) innerOpened++;
+}
+console.log(
+  `fuzz: ${opened}/${FUZZ_N} raw and ${innerOpened}/${FUZZ_N} content mutations still opened; the rest were refused cleanly`,
 );
 console.log('inkw checks passed');

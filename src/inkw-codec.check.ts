@@ -149,6 +149,14 @@ assert.equal(
   'format',
   'a varint longer than 5 bytes',
 );
+// Regression (found by the .inkw fuzz test): an id that is not valid UTF-8 is a clean refusal.
+const badId = sample.slice();
+badId[7] = 0xff; // the first byte of the first stroke's id
+assert.equal(
+  code(() => decodeStrokes(badId)),
+  'format',
+  'invalid UTF-8 in an id',
+);
 const reserved = sample.slice();
 reserved[16] = 0x03; // the channels byte of the first stroke, with an unknown bit set
 assert.equal(

@@ -3,7 +3,14 @@ import { openAbout } from './about';
 import { openCalibration } from './calibrate';
 import { cursorFromFile } from './cursor';
 import { h, icon, toast, togglePopover } from './dom';
-import { inkStats, inkTrailAvailable, lowLatencyCanvas } from './ink';
+import {
+  type CanvasMode,
+  canvasMode,
+  inkStats,
+  inkTrailAvailable,
+  lowLatencyCanvas,
+  setCanvasMode,
+} from './ink';
 import { DEFAULT_TUNING, state, subscribe, type Tuning, update } from './store';
 
 type NumKey = { [K in keyof Tuning]: Tuning[K] extends number ? K : never }[keyof Tuning];
@@ -292,7 +299,44 @@ function panel(): HTMLElement {
   cursorChoice.el.querySelectorAll('button.seg')[3]!.addEventListener('click', () => {
     if (!state.tuning.cursorImage) cursorFile.click();
   });
-  const all = [...rows, ...toggles, side, eraserEnd, cursorChoice];
+  // The canvas type is fixed when the page starts, so this one needs a reload.
+  const canvasOptions: readonly (readonly [CanvasMode, string])[] = [
+    ['auto', 'Auto'],
+    ['on', 'Low-latency'],
+    ['off', 'Standard'],
+  ];
+  const canvasBtns = canvasOptions.map(([v, label]) =>
+    h(
+      'button',
+      {
+        class: 'seg',
+        onclick: () => {
+          if (v === canvasMode()) return;
+          setCanvasMode(v);
+          toast('Reloading to apply the canvas…', 1500);
+          setTimeout(() => location.reload(), 600);
+        },
+      },
+      h('span', {}, label),
+    ),
+  );
+  const canvasChoice = {
+    el: h(
+      'div',
+      {
+        class: 'tune-side',
+        title:
+          'Low-latency draws ink straight to the screen, skipping a frame of delay (Chrome, Edge, Brave; Safari ignores it). Auto avoids it where it is slower or misdraws: Windows (its own ink trail is faster) and Android (it can paint the page black). If your device shows ink fine, choose Low-latency.',
+      },
+      h('div', { class: 'panel-sub' }, 'Canvas (reloads the page):'),
+      h('div', { class: 'segmented', style: 'grid-template-columns:repeat(3,1fr)' }, ...canvasBtns),
+    ),
+    sync: () => {
+      for (const [i, b] of canvasBtns.entries())
+        b.setAttribute('aria-pressed', String(canvasOptions[i]![0] === canvasMode()));
+    },
+  };
+  const all = [...rows, ...toggles, side, eraserEnd, cursorChoice, canvasChoice];
   const refresh = () => {
     for (const r of all) r.sync();
   };
@@ -316,6 +360,7 @@ function panel(): HTMLElement {
     side.el,
     eraserEnd.el,
     cursorChoice.el,
+    canvasChoice.el,
     readout,
     h(
       'button',

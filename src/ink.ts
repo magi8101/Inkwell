@@ -60,7 +60,29 @@ const OS_TRAIL = IS_WINDOWS && 'ink' in navigator;
 // GPUs, so the see-through wet-ink layers covered the page in black whenever nothing was being
 // drawn. Android gets normal canvases; prediction still hides most of the delay.
 const IS_ANDROID = /Android/.test(navigator.userAgent);
-const LOW_LATENCY = !OS_TRAIL && !IS_ANDROID;
+// "Low-latency canvas" setting (Pen feel): Auto keeps the choices above, On forces the desynchronized
+// canvas everywhere it can work (and turns the Windows OS trail off, since they are not combined),
+// Off forces standard canvases. Read here, before the canvases exist, so it is kept outside the
+// settings store; changing it asks for a reload.
+export type CanvasMode = 'auto' | 'on' | 'off';
+const CANVAS_KEY = 'inkwell:canvas';
+export function canvasMode(): CanvasMode {
+  try {
+    const v = localStorage.getItem(CANVAS_KEY);
+    return v === 'on' || v === 'off' ? v : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+export function setCanvasMode(m: CanvasMode) {
+  try {
+    localStorage.setItem(CANVAS_KEY, m);
+  } catch {
+    // Without storage the choice can't be kept; nothing else to do.
+  }
+}
+const MODE = canvasMode();
+const LOW_LATENCY = MODE === 'on' || (MODE === 'auto' && !OS_TRAIL && !IS_ANDROID);
 const ctx = live.getContext('2d', { desynchronized: LOW_LATENCY })!;
 const tctx = tip.getContext('2d', { desynchronized: LOW_LATENCY })!;
 let dpr = devicePixelRatio;
@@ -120,7 +142,7 @@ type InkNavigator = Navigator & {
   ink?: { requestPresenter(o: { presentationArea: Element }): Promise<InkPresenter> };
 };
 let presenter: InkPresenter | null = null;
-(OS_TRAIL ? (navigator as InkNavigator).ink : undefined)
+(OS_TRAIL && !LOW_LATENCY ? (navigator as InkNavigator).ink : undefined)
   ?.requestPresenter({ presentationArea: live })
   .then(
     (p) => {

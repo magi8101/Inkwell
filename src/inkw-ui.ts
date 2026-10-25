@@ -50,8 +50,12 @@ function pick(scope: Scope): { name: string; notebooks: Notebook[] } {
   const inside = new Set([root.id]);
   for (let grew = true; grew; ) {
     grew = false;
-    for (const s of all)
-      if (s.parent && inside.has(s.parent) && !inside.has(s.id)) inside.add(s.id), (grew = true);
+    for (const s of all) {
+      if (s.parent && inside.has(s.parent) && !inside.has(s.id)) {
+        inside.add(s.id);
+        grew = true;
+      }
+    }
   }
   const sections = all
     .filter((s) => inside.has(s.id))
@@ -60,9 +64,11 @@ function pick(scope: Scope): { name: string; notebooks: Notebook[] } {
 }
 
 const day = () => new Date().toISOString().slice(0, 10);
+// A name every OS accepts: no path separators or reserved characters, no control characters.
 const safeName = (s: string) =>
-  s
-    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-')
+  [...s]
+    .map((c) => (/[\\/:*?"<>|]/.test(c) || c.charCodeAt(0) < 32 ? '-' : c))
+    .join('')
     .trim()
     .slice(0, 80) || 'Inkwell';
 
@@ -103,7 +109,17 @@ export function openSaveInkwDialog() {
     ['all', 'Everything'],
   ];
   const btns = options.map(([v, label]) =>
-    h('button', { class: 'seg', onclick: () => ((scope = v), sync()) }, h('span', {}, label)),
+    h(
+      'button',
+      {
+        class: 'seg',
+        onclick: () => {
+          scope = v;
+          sync();
+        },
+      },
+      h('span', {}, label),
+    ),
   );
   const sync = () => {
     for (const [i, b] of btns.entries())
@@ -190,7 +206,7 @@ export async function openInkw(file: File) {
     }
     toast('Opening…', 60_000);
     const bytes = new Uint8Array(await file.arrayBuffer());
-    let data;
+    let data: Awaited<ReturnType<typeof readInkw>>;
     if (isInkwLocked(bytes)) {
       const pw = await askPassword('Locked file', 'This file is locked. Type its password.', false);
       if (pw === null) return;

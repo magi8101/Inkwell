@@ -1,5 +1,5 @@
 import type { Background, CodeBlock, Shape, Stroke, TextBox } from './store';
-import { FONTS } from './stroke';
+import { FONTS } from './stroke.ts';
 
 // What arrives from other people (live sessions, shared links) is data, not code: each function here
 // keeps only well-formed items, with sizes capped, and builds fresh objects from known fields.

@@ -3,26 +3,8 @@ import { isLocked, lock, packBackup, unlock, unpackBackup } from './backup';
 import { h, icon, toast } from './dom';
 import { download } from './export';
 import { blobOf, storePicture } from './images';
-import {
-  BACKGROUNDS,
-  cleanCodes,
-  cleanMd,
-  cleanShapes,
-  cleanStroke,
-  cleanText,
-  hex,
-  num,
-  PAPERS,
-} from './sanitize';
-import {
-  type ImageItem,
-  type Notebook,
-  type Page,
-  type Section,
-  state,
-  uid,
-  update,
-} from './store';
+import { cleanNotebooks } from './notebook-clean';
+import { type Notebook, state, uid, update } from './store';
 
 // Back up everything to one file, and restore from one (backup.ts has the file format). Restoring
 // never replaces anything: the notebooks in the file are added next to yours, with fresh ids, and
@@ -59,82 +41,6 @@ async function makeBackup(password: string): Promise<Blob> {
   return new Blob([bytes as BlobPart], { type: 'application/octet-stream' });
 }
 
-/** Rebuilds a page from untrusted data: known fields only, each checked. */
-function cleanPage(raw: unknown, pic: Map<string, string>): Page | null {
-  const x = raw as Record<string, unknown> | null;
-  if (!x || typeof x !== 'object') return null;
-  const arr = (v: unknown) => (Array.isArray(v) ? v : []);
-  const md = cleanMd(x.md);
-  const images = arr(x.images).flatMap((im: ImageItem) =>
-    im && [im.cx, im.cy, im.w, im.h, im.angle].every(num) && pic.has(im.blob)
-      ? [
-          {
-            id: uid(),
-            blob: pic.get(im.blob)!,
-            cx: im.cx,
-            cy: im.cy,
-            w: im.w,
-            h: im.h,
-            angle: im.angle,
-          },
-        ]
-      : [],
-  );
-  const page: Page = {
-    id: uid(),
-    title: typeof x.title === 'string' ? x.title.slice(0, 200) : 'Untitled page',
-    strokes: arr(x.strokes)
-      .map(cleanStroke)
-      .filter((s): s is NonNullable<typeof s> => !!s),
-    texts: arr(x.texts)
-      .map(cleanText)
-      .filter((t): t is NonNullable<typeof t> => !!t),
-    images,
-    background: BACKGROUNDS.includes(x.background as never)
-      ? (x.background as Page['background'])
-      : 'blank',
-    pageColor: x.pageColor === 'auto' || hex(x.pageColor) ? (x.pageColor as string) : 'auto',
-  };
-  if (md !== undefined) page.md = md;
-  const codes = cleanCodes(x.codes);
-  if (codes.length) page.codes = codes;
-  const shapes = cleanShapes(x.shapes);
-  if (shapes.length) page.shapes = shapes;
-  if (typeof x.paper === 'string' && PAPERS.includes(x.paper))
-    page.paper = x.paper as Page['paper'];
-  if (x.landscape === true) page.landscape = true;
-  const backdrop = typeof x.backdrop === 'string' ? pic.get(x.backdrop) : undefined;
-  if (backdrop) page.backdrop = backdrop;
-  return page;
-}
-
-function cleanNotebooks(raw: unknown[], pic: Map<string, string>): Notebook[] {
-  const out: Notebook[] = [];
-  for (const n of raw.slice(0, 200) as Record<string, unknown>[]) {
-    if (!n || !Array.isArray(n.sections)) continue;
-    const ids = new Map<string, string>();
-    for (const s of n.sections as Record<string, unknown>[]) ids.set(String(s?.id), uid());
-    const sections: Section[] = (n.sections as Record<string, unknown>[]).map((s) => ({
-      id: ids.get(String(s.id))!,
-      name: typeof s.name === 'string' ? s.name.slice(0, 200) : 'Folder',
-      color: hex(s.color) ? (s.color as string) : '#3e63dd',
-      pages: (Array.isArray(s.pages) ? s.pages : [])
-        .map((p) => cleanPage(p, pic))
-        .filter((p): p is Page => !!p),
-      ...(typeof s.parent === 'string' && ids.has(s.parent) ? { parent: ids.get(s.parent)! } : {}),
-      ...(s.collapsed === true ? { collapsed: true } : {}),
-    }));
-    for (const s of sections) if (!s.pages.length) s.pages.push(cleanPage({}, pic)!);
-    if (!sections.length) continue;
-    out.push({
-      id: uid(),
-      name: typeof n.name === 'string' ? n.name.slice(0, 200) : 'Notebook',
-      sections,
-    });
-  }
-  return out;
-}
-
 async function restoreFrom(file: File, password: () => Promise<string | null>) {
   let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
   if (isLocked(bytes)) {
@@ -152,7 +58,7 @@ async function restoreFrom(file: File, password: () => Promise<string | null>) {
       // A picture that cannot be read is skipped; the pages still come back.
     }
   }
-  const notebooks = cleanNotebooks(doc.notebooks, pic);
+  const notebooks = cleanNotebooks(doc.notebooks, pic, uid);
   if (!notebooks.length) throw new Error('The backup has no notebooks');
   const have = new Set(state.notebooks.map((n) => n.name));
   for (const n of notebooks) if (have.has(n.name)) n.name = `${n.name} (restored)`;

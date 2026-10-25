@@ -571,7 +571,12 @@ async function suite() {
       await wait(250);
       folder = (await stored()).notebooks[0].sections.find((x) => x.name === 'Lecture 5');
     }
-    R.pdfImportPages = !!folder && folder.pages.length === 2 && folder.pages.every((p) => p.images.length === 1);
+    // A 2-page PDF opens as ONE long page holding both pictures, stacked top to bottom.
+    R.pdfImportPages =
+      !!folder &&
+      folder.pages.length === 1 &&
+      folder.pages[0].images.length === 2 &&
+      folder.pages[0].images[1].cy > folder.pages[0].images[0].cy;
     R.pdfImportSize = !!folder && Math.round(folder.pages[0].images[0].w) === 400 && Math.round(folder.pages[0].images[0].h) === 267;
     document.querySelector('.row.section').click(); // back to an ordinary page
     await wait(400);

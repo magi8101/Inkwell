@@ -75,23 +75,29 @@ async function addPictures(files: Blob[], at: { x: number; y: number }) {
 }
 
 const input = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+// The pickers for .one, .md and .excalidraw carry no `accept`: with an extension the system does not
+// know, the desktop file dialogs (macOS especially) grey those files out, so they could not be
+// picked at all. The files are checked by name after picking instead.
+const only = (files: FileList | null, ext: RegExp, what: string) => {
+  const all = [...(files ?? [])];
+  const ok = all.filter((f) => ext.test(f.name));
+  if (all.length && !ok.length) toast(`That is not ${what}.`, 3000);
+  return ok;
+};
 // OneNote sections (.one) open as a new, editable section; several at once each become one.
-const oneInput = h('input', { type: 'file', accept: '.one', multiple: true, hidden: true });
+const oneInput = h('input', { type: 'file', multiple: true, hidden: true });
 document.body.append(oneInput);
 oneInput.addEventListener('change', async () => {
-  for (const f of [...(oneInput.files ?? [])]) await importOneNote(f);
+  for (const f of only(oneInput.files, /\.one$/i, 'a OneNote section (.one)'))
+    await importOneNote(f);
   oneInput.value = '';
 });
 const isOneNote = (f: File) => /\.one$/i.test(f.name);
-const exInput = h('input', {
-  type: 'file',
-  accept: '.excalidraw,application/json',
-  multiple: true,
-  hidden: true,
-});
+const exInput = h('input', { type: 'file', multiple: true, hidden: true });
 document.body.append(exInput);
 exInput.addEventListener('change', async () => {
-  for (const f of [...(exInput.files ?? [])]) await importExcalidraw(f);
+  for (const f of only(exInput.files, /\.(excalidraw|json)$/i, 'an Excalidraw file (.excalidraw)'))
+    await importExcalidraw(f);
   exInput.value = '';
 });
 const zipInput = h('input', { type: 'file', accept: '.zip,application/zip', hidden: true });
@@ -121,15 +127,10 @@ async function pickFolder() {
       toast(`Couldn’t read that folder: ${(e as Error).message}`, 5000);
   }
 }
-const mdInput = h('input', {
-  type: 'file',
-  accept: '.md,.markdown,text/markdown',
-  multiple: true,
-  hidden: true,
-});
+const mdInput = h('input', { type: 'file', multiple: true, hidden: true });
 document.body.append(mdInput);
 mdInput.addEventListener('change', async () => {
-  await importMarkdown([...(mdInput.files ?? [])]);
+  await importMarkdown(only(mdInput.files, /\.(md|markdown|txt)$/i, 'a Markdown file (.md)'));
   mdInput.value = '';
 });
 const isPdf = (f: File) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
@@ -139,7 +140,17 @@ const pdfInput = h('input', {
   multiple: true,
   hidden: true,
 });
-document.body.append(pdfInput);
+const pdfPagesInput = h('input', {
+  type: 'file',
+  accept: 'application/pdf,.pdf',
+  multiple: true,
+  hidden: true,
+});
+document.body.append(pdfInput, pdfPagesInput);
+pdfPagesInput.addEventListener('change', async () => {
+  for (const f of [...(pdfPagesInput.files ?? [])]) await importPdf(f, false);
+  pdfPagesInput.value = '';
+});
 pdfInput.addEventListener('change', async () => {
   for (const f of [...(pdfInput.files ?? [])]) await importPdf(f);
   pdfInput.value = '';
@@ -181,6 +192,11 @@ insertButton.addEventListener('click', () =>
     { label: 'Stamps (saved selections)…', icon: Shapes, run: () => openStamps(insertButton) },
     'sep',
     { label: 'PDF (to write on)…', icon: FileText, run: () => pdfInput.click() },
+    {
+      label: 'PDF, one notebook page per PDF page…',
+      icon: FileText,
+      run: () => pdfPagesInput.click(),
+    },
     { label: 'Markdown file (.md)…', icon: FileType, run: () => mdInput.click() },
     { label: 'Excalidraw drawing (.excalidraw)…', icon: Shapes, run: () => exInput.click() },
     { label: 'Zip file (notes, PDFs, pictures)…', icon: FileArchive, run: () => zipInput.click() },

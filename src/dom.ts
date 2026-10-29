@@ -136,6 +136,18 @@ export function openMenu(anchor: Element, items: (MenuItem | 'sep')[]) {
   close = togglePopover(anchor, menu);
 }
 
+/** A message that is updated in place while something runs (progress), and removed with `close`. */
+export function progressToast(message: string) {
+  const el = h('div', { class: 'toast', role: 'status' }, message);
+  document.body.append(el);
+  return {
+    set: (text: string) => {
+      el.textContent = text;
+    },
+    close: () => el.remove(),
+  };
+}
+
 /** Short non-blocking message at the bottom of the screen. */
 export function toast(message: string, ms = 6000) {
   const el = h('div', { class: 'toast', role: 'status' }, message);

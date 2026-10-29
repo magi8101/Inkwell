@@ -28,6 +28,8 @@
     "e2e:onenote": "node e2e/onenote.mjs",
     "e2e:calibration": "node e2e/calibration.mjs",
     "e2e:drop": "node e2e/drop.mjs",
+    "e2e:openfile": "node e2e/openfile.mjs",
+    "e2e:menus": "node e2e/menus.mjs",
     "crosscheck:inkw": "node scripts/crosscheck-inkw.ts && node src/onenote-errors.check.ts",
     "e2e:ink": "node e2e/ink-search.mjs",
     "release": "node scripts/release.mjs",

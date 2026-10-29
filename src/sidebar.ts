@@ -1,6 +1,7 @@
 import {
   Book,
   BookPlus,
+  Bug,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -295,6 +296,13 @@ function notebookMenu() {
           },
         ]
       : []),
+    'sep',
+    {
+      label: 'Report a problem…',
+      icon: Bug,
+      // Loaded when used: the report reads the pen and speed state, which this module need not know.
+      run: () => void import('./report').then((m) => m.openProblemReport()),
+    },
   ]);
 }
 

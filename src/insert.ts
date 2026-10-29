@@ -21,7 +21,7 @@ import { addCodeBlock } from './code';
 import { h, icon, openMenu, toast } from './dom';
 import { importExcalidraw, isExcalidraw } from './excalidraw';
 import { storePicture } from './images';
-import { isInkwName, openInkw } from './inkw-ui';
+import { isInkwName, openInkw, sniffInkw } from './inkw-ui';
 import { insert, takeOverPaste } from './lasso';
 import { importMarkdown, isMarkdown } from './markdown';
 import { importOneNote } from './onenote';
@@ -184,17 +184,79 @@ async function pasteFromClipboard() {
   }
 }
 
+// One picker for everything Inkwell opens. It is the only way to open files on a tablet, where nothing
+// can be dragged in from the file manager. Each file goes to the importer for what it is; what Inkwell
+// cannot open is said out loud, never skipped silently.
+const IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|bmp)$/i;
+const anyInput = h('input', { type: 'file', multiple: true, hidden: true });
+document.body.append(anyInput);
+anyInput.addEventListener('change', async () => {
+  const files = [...(anyInput.files ?? [])];
+  anyInput.value = '';
+  await openFiles(files, centre);
+});
+
+/** Opens files by what they are (zips, .inkw, .one, PDFs, Markdown, Excalidraw, pictures). */
+async function openFiles(files: File[], at: () => { x: number; y: number }) {
+  const zips: File[] = [];
+  const inkw: File[] = [];
+  const ones: File[] = [];
+  const pdfs: File[] = [];
+  const notes: File[] = [];
+  const drawings: File[] = [];
+  const pictures: File[] = [];
+  const unknown: string[] = [];
+  for (const f of files) {
+    if (/\.zip$/i.test(f.name)) zips.push(f);
+    else if (isInkwName(f) || (await sniffInkw(f))) inkw.push(f);
+    else if (isOneNote(f)) ones.push(f);
+    else if (isPdf(f)) pdfs.push(f);
+    else if (isMarkdown(f)) notes.push(f);
+    else if (isExcalidraw(f)) drawings.push(f);
+    else if (f.type.startsWith('image/') || IMAGE_NAME.test(f.name)) {
+      // Some systems give no type for a picture; the picture code needs one.
+      pictures.push(
+        f.type
+          ? f
+          : new File([f], f.name, {
+              type: `image/${f.name.split('.').pop()!.toLowerCase().replace('jpg', 'jpeg')}`,
+            }),
+      );
+    } else unknown.push(f.name);
+  }
+  for (const f of zips)
+    await readZip(f).then(offerBundle, () => toast(`Couldn’t open “${f.name}” as a zip.`, 4000));
+  for (const f of inkw) await openInkw(f);
+  for (const f of ones) await importOneNote(f);
+  for (const f of pdfs) await importPdf(f);
+  if (notes.length) await importMarkdown(notes);
+  for (const f of drawings) await importExcalidraw(f);
+  if (pictures.length) await addPictures(pictures, at());
+  if (unknown.length)
+    toast(
+      `Inkwell can’t open ${unknown
+        .slice(0, 3)
+        .map((n) => `“${n}”`)
+        .join(
+          ', ',
+        )}${unknown.length > 3 ? ` and ${unknown.length - 3} more` : ''}. It opens .inkw, .one, PDF, Markdown, Excalidraw, zip and picture files.`,
+      6000,
+    );
+}
+
 export const insertButton = h(
   'button',
   {
     class: 'tb-btn',
     'aria-label': 'Insert',
-    title: 'Insert a picture (or drag one onto the page)',
+    title: 'Insert a picture, or open a file (you can also drag files onto the page)',
   },
   icon(ImagePlus),
 );
 insertButton.addEventListener('click', () =>
   openMenu(insertButton, [
+    { label: 'Open a file…', icon: FolderOpen, run: () => anyInput.click() },
+    'sep',
     { label: 'Picture from files…', icon: Images, run: () => input.click() },
     { label: 'Paste picture', icon: ClipboardPaste, run: () => void pasteFromClipboard() },
     { label: 'Stamps (saved selections)…', icon: Shapes, run: () => openStamps(insertButton) },
@@ -248,22 +310,10 @@ addEventListener('drop', (e) => {
     b.then(offerBundle, (err) =>
       toast(`Couldn’t read that: ${(err as Error).message ?? err}`, 5000),
     );
-  void (async () => {
-    for (const f of files.filter(isInkwName)) await openInkw(f);
-    for (const f of files.filter(isOneNote)) await importOneNote(f);
-    for (const f of files.filter(isPdf)) await importPdf(f);
-    await importMarkdown(files.filter(isMarkdown));
-    for (const f of files.filter(isExcalidraw)) await importExcalidraw(f);
-    const pictures = files.filter(
-      (f) => !isInkwName(f) && !isOneNote(f) && !isPdf(f) && !isMarkdown(f) && !isExcalidraw(f),
-    );
-    if (pictures.length) {
-      const r = stage.getBoundingClientRect();
-      const onPage =
-        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-      await addPictures(pictures, onPage ? toWorld(e.clientX, e.clientY) : centre());
-    }
-  })();
+  const r = stage.getBoundingClientRect();
+  const onPage =
+    e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  void openFiles(files, () => (onPage ? toWorld(e.clientX, e.clientY) : centre()));
 });
 
 // Ctrl/Cmd+V with a picture on the system clipboard (a copied screenshot or photo).

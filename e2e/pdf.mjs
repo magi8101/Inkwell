@@ -82,6 +82,7 @@ for (const [engine, type] of [['Chromium', chromium], ['Firefox', firefox], ['We
   R.firstPictureQuickly = first !== null && first < 4000;
   R.fillsInGradually = seenPartial;
   R.allSixtyPagesDrawn = sec?.images.length === 60 && sec.pages === 1;
+  R.picturesAreStoredInPageOrder = !!sec && sec.images.length === 60 && sec.images.every((im, i) => i === 0 || im.cy > sec.images[i - 1].cy);
   const imgs = [...(sec?.images ?? [])].sort((a, b) => a.cy - b.cy);
   const px = 96 / 72;
   R.sizesMatchThePdf = imgs.length === 60 && imgs.every((im, i) => Math.abs(im.w - small.sizes[i][0] * px) < 0.01 && Math.abs(im.h - small.sizes[i][1] * px) < 0.01);

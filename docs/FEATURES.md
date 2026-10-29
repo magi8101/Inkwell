@@ -1,6 +1,6 @@
 # Inkwell features
 
-What exists today, and what could come next. Updated 2026-10-29 (app version 0.2.6).
+What exists today, and what could come next. Updated 2026-10-30 (app version 0.2.8).
 
 ## Shipped
 
@@ -21,27 +21,33 @@ What exists today, and what could come next. Updated 2026-10-29 (app version 0.2
 **Files**
 - `.inkw` files: save a page, folder, notebook or everything in one file with its pictures, optionally
   locked with a password; readable without Inkwell (`docs/inkw-spec.md`, `tools/inkw.py`).
-- Open PDFs as one long page (or one page per PDF page), OneNote sections, Excalidraw files, zips and
-  folders; save back to Excalidraw.
+- **Open a file…** (Insert menu) opens any file Inkwell understands, one or several at once, and says
+  so when it cannot; it is the way to open files on a tablet. Files can also be dropped anywhere in
+  the window.
+- PDFs open at once as one long page (or one page per PDF page) and fill in while you write;
+  OneNote sections (also inside zips and folders), Excalidraw files, zips and folders; save back to
+  Excalidraw.
 - Export as PDF, PNG or SVG; copy a selection as a picture; stamps (reusable selections).
 - Back up everything to one file; old backups still restore.
 - Read-only share links (encrypted in the browser, the key never leaves the link), and live sessions.
 
 **Everywhere**
 - Website (including iPad), Windows, macOS, Linux and Android apps, with updates from within the app.
-- A "Report a problem" text report for testers, and a pen report from the calibration.
+- "Report a problem" (notebook menu and About): a text report of the device and settings, never the
+  notes, and a pen report from the calibration.
+- The checks and browser tests (Chromium, Firefox, WebKit) run on every push (`.github/workflows/test.yml`).
 
 ## Candidates for next
 
 Small
-- Report a problem in a more visible place (main menu).
 - Protractor on the ruler.
 - A stronger scroll hint on the phone toolbar.
 - Page thumbnails written into `.inkw` files.
 
 Medium
+- PDF to a Markdown note (needs a 17 MB wasm library; a size decision).
+- Obsidian: callouts, properties, tags, `![[embeds]]`, a backlinks panel, lazy loading of big vaults.
 - Double-click and "open with" for `.inkw` on every OS (needs real machines to test).
-- A routine test workflow on GitHub (the checks and browser tests currently run by hand).
 - Ink on Markdown notes.
 - Continuous scrolling pages for paper notebooks.
 - Pen textures (fountain, brush, pencil).

@@ -160,11 +160,23 @@ async function importLongPage(file: File, name: string, bar: Bar) {
     try {
       const pic = await pagePicture(pg);
       if (alive()) {
+        // In its place among the pictures, so the stored page keeps PDF page order however the
+        // four being drawn finish.
+        const next: ImageItem = {
+          id: uid(),
+          blob: pic.blob,
+          cx: centre,
+          cy: y + h / 2,
+          w,
+          h,
+          angle: 0,
+        };
         update(() => {
-          page!.images = [
-            ...page!.images,
-            { id: uid(), blob: pic.blob, cx: centre, cy: y + h / 2, w, h, angle: 0 },
-          ];
+          const at = page!.images.findIndex((im) => im.cy > next.cy);
+          page!.images =
+            at < 0
+              ? [...page!.images, next]
+              : [...page!.images.slice(0, at), next, ...page!.images.slice(at)];
         });
       }
     } catch (e) {

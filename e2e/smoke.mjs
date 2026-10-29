@@ -12,6 +12,14 @@ async function suite() {
   addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
   const bg = document.querySelector('#bg');
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Waits for a condition (up to ms) instead of a fixed time: a slow machine delays animation frames.
+  const until = async (f, ms = 3000) => {
+    for (let t = 0; t < ms; t += 50) {
+      if (f()) return true;
+      await wait(50);
+    }
+    return !!f();
+  };
   // Notes live in IndexedDB; flush the idle autosave, then read what was stored.
   const stored = async () => {
     dispatchEvent(new Event('pagehide'));
@@ -234,8 +242,7 @@ async function suite() {
   // Zoom: Firefox-style line-mode Ctrl+wheel, and Safari pinch gestures.
   const chip = document.querySelector('#zoom');
   bg.dispatchEvent(new WheelEvent('wheel', { clientX: 700, clientY: 400, deltaY: -3, deltaMode: 1, ctrlKey: true, bubbles: true, cancelable: true }));
-  await wait(200);
-  R.zoomWheelLines = chip.textContent !== '100%';
+  R.zoomWheelLines = await until(() => chip.textContent !== '100%');
   // iPad-style flood: 240 Pencil samples as separate pointermoves must stay cheap.
   btn('Pen').click();
   pid++;
@@ -529,8 +536,7 @@ async function suite() {
   document.querySelector('#zoom').click();
   await wait(50);
   [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Upright')).click();
-  await wait(50);
-  R.uprightResets = !chipText().includes('°');
+  R.uprightResets = await until(() => !chipText().includes('°'));
   // Toolbar docking: drop the grip at the left edge → a vertical bar there; drag away → floating.
   const tb = document.querySelector('#toolbar');
   const grip = document.querySelector('.tb-grip');

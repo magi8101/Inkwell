@@ -1,7 +1,7 @@
 // Run: node src/stroke.check.ts — fails loudly if eraser hit-testing or cutting breaks.
 import assert from 'node:assert/strict';
 import type { Stroke } from './store.ts';
-import { cleanPoints, cut, hits } from './stroke.ts';
+import { cleanPoints, cut, hits, minWidthExtra } from './stroke.ts';
 
 const line: Stroke = {
   id: 'a',
@@ -67,3 +67,18 @@ assert.ok(
   `width no longer alternates sample to sample (jump ${maxJump.toFixed(3)})`,
 );
 console.log('stroke checks passed');
+
+// Thin strokes are widened to about one device pixel so they paint evenly; wide ones are untouched.
+assert.equal(minWidthExtra(3, 1, false), 0, 'a 3 px stroke at 100% needs nothing');
+assert.equal(minWidthExtra(1.1, 1, false), 0, 'exactly one device pixel is enough');
+assert.ok(
+  Math.abs(3 * 0.14 + minWidthExtra(3, 0.14, false) * 0.14 - 1.1) < 1e-9,
+  'a 3 px stroke at 14% becomes 1.1 device px',
+);
+assert.ok(
+  minWidthExtra(3, 0.14, true) > minWidthExtra(3, 0.14, false),
+  'a pressure-thinned pen counts as narrower',
+);
+assert.equal(minWidthExtra(0, 1, false), 0, 'no width, nothing to widen');
+assert.equal(minWidthExtra(3, 0, false), 0, 'no scale, nothing to widen');
+assert.equal(minWidthExtra(Number.NaN, 1, false), 0, 'not a number');

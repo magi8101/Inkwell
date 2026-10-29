@@ -131,6 +131,42 @@ export const BLACK = '#1c1c1e';
 /** Near-black ink flips to near-white on dark pages so it stays readable, like OneNote. */
 export const inkColor = (c: string, dark: boolean) => (dark && c === BLACK ? '#f4f4f5' : c);
 
+/** Thinner than this on screen (device pixels) and a filled stroke paints unevenly: patchy and grainy. */
+const MIN_DEVICE_PX = 1.1;
+
+/**
+ * How much wider (in world units) a stroke must be drawn so it is at least about one device pixel
+ * thick, or 0 when it already is. `scale` is device pixels per world unit. Pressure-thinned pens are
+ * narrower than their nominal width, so they count as narrower.
+ */
+export function minWidthExtra(width: number, scale: number, thinned: boolean): number {
+  if (!(scale > 0) || !(width > 0)) return 0;
+  const px = width * scale * (thinned ? 1 - tuning.thinning * 0.5 : 1);
+  return px >= MIN_DEVICE_PX ? 0 : (MIN_DEVICE_PX - px) / scale;
+}
+
+/**
+ * Fills an outline made by `outline()`, and, for a stroke too thin to paint evenly at this zoom, also
+ * strokes its edge so the line stays solid. Translucent strokes are left alone (the two passes would
+ * overlap and darken); they are wide in practice.
+ */
+export function fillInk(
+  ctx: CanvasRenderingContext2D,
+  path: Path2D,
+  s: Shape & { opacity: number },
+) {
+  ctx.fill(path);
+  if (s.opacity < 0.95) return;
+  const m = ctx.getTransform();
+  const extra = minWidthExtra(s.width, Math.hypot(m.a, m.b), s.tool === 'pen' && s.pressure);
+  if (extra > 0) {
+    ctx.strokeStyle = ctx.fillStyle;
+    ctx.lineWidth = extra;
+    ctx.lineJoin = 'round';
+    ctx.stroke(path);
+  }
+}
+
 export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, dark: boolean) {
   let p = paths.get(s);
   if (!p) {
@@ -139,7 +175,7 @@ export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, dark: boole
   }
   ctx.globalAlpha = s.opacity;
   ctx.fillStyle = inkColor(s.color, dark);
-  ctx.fill(p);
+  fillInk(ctx, p, s);
 }
 
 const segDist = (px: number, py: number, ax: number, ay: number, bx: number, by: number) => {

@@ -16,7 +16,7 @@ import {
   uid,
   update,
 } from './store';
-import { cut, hits, inkColor, LINE_HEIGHT, outline, tipDiameter } from './stroke';
+import { cut, fillInk, hits, inkColor, LINE_HEIGHT, outline, tipDiameter } from './stroke';
 import {
   isPalm,
   localToWorld,
@@ -353,7 +353,8 @@ function snapShape(a: Gesture) {
   ctx.setTransform(...viewMatrix(dpr));
   ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
   ctx.fillStyle = inkColor(a.color, pageIsDark());
-  for (const pts of a.shape) ctx.fill(outline(pts, { ...a, pressure: false }, true));
+  for (const pts of a.shape)
+    fillInk(ctx, outline(pts, { ...a, pressure: false }, true), { ...a, pressure: false });
 }
 let active: Gesture | null = null;
 
@@ -703,7 +704,7 @@ function drawLive(a: Gesture, e: PointerEvent) {
     ctx.setTransform(...viewMatrix(dpr));
     ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
     ctx.fillStyle = inkColor(a.color, pageIsDark());
-    ctx.fill(outline(a.points, { ...a, pressure: false }, true));
+    fillInk(ctx, outline(a.points, { ...a, pressure: false }, true), { ...a, pressure: false });
     drawRulerLabel(a);
     return;
   }
@@ -728,7 +729,7 @@ function drawLive(a: Gesture, e: PointerEvent) {
   ctx.setTransform(...viewMatrix(dpr));
   ctx.globalAlpha = 1; // opacity is on the wet-ink wrapper
   ctx.fillStyle = color;
-  ctx.fill(outline(a.points, a, false));
+  fillInk(ctx, outline(a.points, a, false), a);
   rememberInkBox(a);
   drawTip(a);
   if (presenter && osTrailActive(a)) {

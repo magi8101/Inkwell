@@ -567,7 +567,8 @@ async function suite() {
     dtp.items.add(new File([bytes], 'Lecture 5.pdf', { type: 'application/pdf' }));
     document.querySelector('#stage').dispatchEvent(new DragEvent('drop', { clientX: 600, clientY: 400, dataTransfer: dtp, bubbles: true, cancelable: true }));
     let folder = null;
-    for (let i = 0; i < 40 && !folder; i++) {
+    // The folder appears with the first PDF page and fills in, so wait for both pictures.
+    for (let i = 0; i < 80 && !(folder && folder.pages[0]?.images.length >= 2); i++) {
       await wait(250);
       folder = (await stored()).notebooks[0].sections.find((x) => x.name === 'Lecture 5');
     }

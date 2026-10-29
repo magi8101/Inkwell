@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import {
   bestPrediction,
   fastLineFit,
+  looksFlat,
   type PenSample,
   palmThreshold,
   pressureFit,
+  pressureVerdict,
+  rateFromTimes,
   sampleRate,
   smoothingFromStill,
   startWarmup,
@@ -104,3 +107,48 @@ const wobbly = fastLineFit(Array.from({ length: 4 }, () => line(3)))!;
 assert.ok(clean.speedGain > wobbly.speedGain, 'clean fast lines → higher speed gain');
 assert.ok(clean.speed > 1.4 && clean.speed < 1.6, 'speed in px/ms');
 assert.equal(fastLineFit([line(0.2), line(0.2)]), null, 'needs three lines');
+
+// Hover rate: from several events, not one. A 120 Hz pen, a 60 Hz frame-aligned pen, a pause in
+// the middle, and too few events to say anything.
+const ticks = (hz: number, n: number, start = 0) =>
+  Array.from({ length: n }, (_, i) => start + (i * 1000) / hz);
+assert.ok(Math.abs(rateFromTimes(ticks(120, 60)) - 120) < 1, '120 Hz');
+assert.ok(Math.abs(rateFromTimes(ticks(60, 60)) - 60) < 1, '60 Hz');
+assert.ok(
+  Math.abs(rateFromTimes([...ticks(100, 20), ...ticks(100, 20, 2000)]) - 100) < 1,
+  'a pause is not the rate',
+);
+assert.equal(rateFromTimes([5]), 0, 'one event says nothing');
+assert.equal(rateFromTimes([1, 2]), 0, 'two events are not enough');
+assert.equal(rateFromTimes([10, 10, 10, 10]), 0, 'identical times say nothing');
+
+// Pressure verdicts: what the wizard tells the person after light and firm writing.
+const spread = (lo: number, hi: number, n = 150) =>
+  Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
+assert.equal(
+  pressureVerdict(spread(0.1, 0.3, 10), spread(0.5, 0.8, 150)),
+  'more',
+  'too few light samples',
+);
+assert.equal(pressureVerdict(spread(0.1, 0.3), spread(0.5, 0.8)), 'ok', 'real pressure');
+assert.equal(
+  pressureVerdict(spread(0.2, 0.4), spread(0.22, 0.42)),
+  'weak',
+  'the firm writing was not firmer',
+);
+assert.equal(
+  pressureVerdict(new Array(150).fill(0.5), new Array(150).fill(0.5)),
+  'flat',
+  'a fixed 0.5',
+);
+assert.equal(
+  pressureVerdict(new Array(150).fill(0), new Array(150).fill(1)),
+  'flat',
+  'two levels only',
+);
+assert.ok(
+  looksFlat(new Array(60).fill(0.5)) && !looksFlat(new Array(20).fill(0.5)),
+  'flat needs enough samples',
+);
+assert.ok(!looksFlat(spread(0.1, 0.9, 60)), 'a spread of pressure is not flat');
+console.log('hover and pressure verdict checks passed');

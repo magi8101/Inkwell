@@ -35,6 +35,42 @@ export function sampleRate(samples: readonly PenSample[]): number {
 }
 
 /**
+ * Events per second from event times (ms), taking the median gap between neighbours that are less
+ * than 100 ms apart (a longer gap is a pause, not the pen's rate). 0 when there is too little to say.
+ * Hover has no coalesced events on many pens, so the rate has to come from several events.
+ */
+export function rateFromTimes(times: readonly number[]): number {
+  const sorted = [...times].sort((a, b) => a - b);
+  const gaps: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const d = sorted[i]! - sorted[i - 1]!;
+    if (d > 0 && d < 100) gaps.push(d);
+  }
+  return gaps.length >= 3 ? 1000 / median(gaps) : 0;
+}
+
+/**
+ * What light and firm writing say about a pen's pressure, so the wizard can tell the person at once
+ * instead of ending with "no usable pressure":
+ *  - `more`: not enough samples yet;
+ *  - `flat`: it only ever reports one or two values (no pressure sensor, or a driver that fixes it);
+ *  - `weak`: the firm writing is hardly harder than the light (press harder and write again);
+ *  - `ok`.
+ */
+export function pressureVerdict(
+  light: readonly number[],
+  firm: readonly number[],
+): 'more' | 'flat' | 'weak' | 'ok' {
+  if (light.length < 20 || firm.length < 20) return 'more';
+  if (pressureLevels([...light, ...firm]) <= 2) return 'flat';
+  return median(firm) - median(light) < 0.05 ? 'weak' : 'ok';
+}
+
+/** A pen that reports one or two pressure values over enough samples has no pressure to measure. */
+export const looksFlat = (values: readonly number[]) =>
+  values.length >= 40 && pressureLevels(values) <= 2;
+
+/**
  * Holding the pen still: how much the reported position wanders (px RMS around its mean) and the
  * "Follow" smoothing that hides it. Steady sensors get almost raw ink (snappier), noisy ones more
  * smoothing.

@@ -1,5 +1,13 @@
 import { Gauge, X } from 'lucide';
-import { fitSettings, median, type PenSample, sampleRate } from './calibration';
+import {
+  fitSettings,
+  looksFlat,
+  median,
+  type PenSample,
+  pressureVerdict,
+  rateFromTimes,
+  sampleRate,
+} from './calibration';
 import { capture, h, IS_MAC, icon, toast } from './dom';
 import { inkStats, inkTrailAvailable, lowLatencyCanvas, pressLog } from './ink';
 import { bridge } from './linux-pen';
@@ -12,6 +20,10 @@ import { type Tuning, update } from './store';
 interface Measurements {
   hover: boolean | null;
   hoverRate: number;
+  /** Times (ms) of hover events, so the rate comes from many events, not one. */
+  hoverTimes: number[];
+  /** The pen reports one or two pressure values only: there is no pressure to measure. */
+  pressureFlat: boolean;
   still: PenSample[];
   light: PenSample[];
   firm: PenSample[];
@@ -51,10 +63,11 @@ interface Step {
 const STEPS: Step[] = [
   {
     title: 'Hover',
-    text: 'Hold your pen just above the circle without touching the screen, and move it slowly.',
+    text: 'Hold your pen just above the circle without touching the screen, and move it slowly. If nothing happens, touch the screen with the pen: that tells Inkwell this pen has no hover, which is fine.',
     guide: 'circle',
     optional: true,
-    done: (m) => m.hover === true,
+    // Hover seen, or the person touched down instead (hover is false): either answers the question.
+    done: (m) => m.hover !== null,
   },
   {
     title: 'Hold still',
@@ -67,14 +80,14 @@ const STEPS: Step[] = [
     text: 'Write a word along the line using a very light touch.',
     guide: 'line',
     id: 'light',
-    done: (m) => m.light.length >= 150,
+    done: (m) => m.light.length >= 150 || m.pressureFlat,
   },
   {
     title: 'Firm writing',
     text: 'Now write it again, pressing firmly.',
     guide: 'line',
     id: 'firm',
-    done: (m) => m.firm.length >= 150,
+    done: (m) => m.firm.length >= 150 || m.pressureFlat,
   },
   {
     title: 'Fast circles',
@@ -116,6 +129,8 @@ function fresh(): Measurements {
   return {
     hover: null,
     hoverRate: 0,
+    hoverTimes: [],
+    pressureFlat: false,
     still: [],
     light: [],
     firm: [],
@@ -249,7 +264,7 @@ function reportText(m: Measurements, r: Result, applied: boolean): string {
     '',
     'PEN',
     `  Type reported: ${m.penType}; pressure: ${m.light.length ? `${median(m.light.map((s) => s.p)).toFixed(2)} light / ${median(m.firm.map((s) => s.p)).toFixed(2)} firm` : 'n/a'}; tilt: ${m.tilt ? 'yes' : 'no'}`,
-    `  Hover: ${m.hover === null ? 'not tested' : m.hover ? `yes (${Math.round(m.hoverRate)} Hz)` : 'no'}; side button: ${m.sideButton ? 'yes' : 'not detected'}; eraser end: ${m.eraserEnd ? 'yes' : 'not detected'}`,
+    `  Hover: ${m.hover === null ? 'not tested' : m.hover ? `yes (${m.hoverRate ? `${Math.round(m.hoverRate)} events/s` : 'rate unknown'})` : 'no'}; side button: ${m.sideButton ? 'yes' : 'not detected'}; eraser end: ${m.eraserEnd ? 'yes' : 'not detected'}`,
     `  Sample rate while writing: ${Math.round(sampleRate(fast))} Hz`,
     '',
     'RAW INPUT (what the browser delivered during calibration)',
@@ -466,11 +481,21 @@ export function openCalibration() {
 
   let current: PenSample[] | null = null;
   let downId = -1;
+  /** A sentence about what the wizard saw, shown in place of the progress figure until it clears. */
+  let hint = '';
 
   pad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     const step = STEPS[index];
     if (!step) return;
+    // Touching down during the hover step means this pen (or screen) reports no hover: that answers it.
+    if (step.guide === 'circle') {
+      if (m.hover === null) m.hover = false;
+      if (e.pointerType !== 'touch') m.penType = e.pointerType;
+      hint = m.hover ? '' : 'No hover reported by this pen or screen: that is fine.';
+      progress();
+      return;
+    }
     if (e.pointerType !== 'touch') m.penType = e.pointerType;
     if (e.pointerType === 'pen' && (e.button === 2 || e.buttons & 2)) m.sideButton = true;
     if (e.pointerType === 'pen' && (e.button === 5 || e.buttons & 32)) m.eraserEnd = true;
@@ -505,7 +530,11 @@ export function openCalibration() {
       const r = pad.getBoundingClientRect();
       if (e.clientX > r.left && e.clientX < r.right) {
         m.hover = true;
-        m.hoverRate = Math.max(m.hoverRate, sampleRate(samplesOf(e)) || m.hoverRate);
+        for (const ev of e.getCoalescedEvents?.().length ? e.getCoalescedEvents() : [e])
+          m.hoverTimes.push(ev.timeStamp);
+        if (m.hoverTimes.length > 400) m.hoverTimes.splice(0, m.hoverTimes.length - 400);
+        m.hoverRate = rateFromTimes(m.hoverTimes);
+        hint = '';
         progress();
       }
       return;
@@ -534,6 +563,26 @@ export function openCalibration() {
     else if (step?.id === 'lines' && current.length >= 8) m.lines.push(current);
     if (step?.guide === 'ring') m.fast.push(current);
     current = null;
+    // Tell the person about their pressure now, not at the end: a pen that reports a fixed value has
+    // nothing to measure, and firm writing that is no firmer than the light writing is written again.
+    if (step?.id === 'light' && looksFlat(m.light.map((q) => q.p))) {
+      m.pressureFlat = true;
+      hint =
+        'This pen reports one fixed pressure, so line width cannot follow how hard you press. That comes from the pen or its driver, not Inkwell. Skipping the pressure steps.';
+    } else if (step?.id === 'firm' && m.firm.length >= 150) {
+      const verdict = pressureVerdict(
+        m.light.map((q) => q.p),
+        m.firm.map((q) => q.p),
+      );
+      if (verdict === 'weak') {
+        m.firm = [];
+        hint =
+          'That was hardly firmer than your light writing. Press noticeably harder (but kindly to the pen) and write again.';
+      } else if (verdict === 'flat') {
+        m.pressureFlat = true;
+        hint = 'This pen reports one fixed pressure. Skipping the pressure steps.';
+      }
+    }
     progress();
   };
   pad.addEventListener('pointerup', up);
@@ -545,10 +594,13 @@ export function openCalibration() {
     const step = STEPS[index];
     if (!step) return;
     const ok = step.done(m);
-    status.textContent = ok ? 'Got it ✓' : statusFor(step);
-    if (ok && !advancing) advancing = window.setTimeout(() => go(index + 1), 700);
+    const say = hint && (step.guide === 'circle' || step.id === 'light' || step.id === 'firm');
+    status.textContent = ok ? (say ? hint : 'Got it ✓') : statusFor(step);
+    // Longer when there is a sentence to read.
+    if (ok && !advancing) advancing = window.setTimeout(() => go(index + 1), say ? 3200 : 700);
   }
   function statusFor(step: Step) {
+    if (hint && (step.guide === 'circle' || step.id === 'light' || step.id === 'firm')) return hint;
     if (step.guide === 'dot' && m.still.length) {
       return `Hold still… ${Math.min(2, (m.still.at(-1)!.t - m.still[0]!.t) / 1000).toFixed(1)} s`;
     }
@@ -563,6 +615,10 @@ export function openCalibration() {
   function go(i: number) {
     clearTimeout(advancing);
     advancing = 0;
+    hint =
+      m.pressureFlat && STEPS[i]?.id === 'firm'
+        ? 'Skipped: this pen has no pressure to measure.'
+        : '';
     // A step left without the hover it asked for means this pen/screen has no hover.
     if (STEPS[index]?.guide === 'circle' && m.hover === null && i > index) m.hover = false;
     index = i;
@@ -577,6 +633,8 @@ export function openCalibration() {
     skip.textContent = step.optional ? 'Skip' : 'Skip step';
     for (const [k, d] of [...dots.children].entries()) d.classList.toggle('on', k <= index);
     drawGuide();
+    // A step whose answer is already known (pressure steps for a pen with no pressure) moves on at once.
+    if (step.done(m)) progress();
   }
 
   function showResult() {

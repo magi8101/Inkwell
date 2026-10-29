@@ -1,6 +1,7 @@
 import { FileText, FolderOpen, Image as ImageIcon, X } from 'lucide';
 import { h, icon, toast } from './dom';
 import { storePicture } from './images';
+import { importOneNote } from './onenote';
 import {
   type ImageItem,
   newMarkdownPage,
@@ -42,7 +43,7 @@ interface DirHandle {
   entries(): AsyncIterable<[string, DirHandle | { kind: 'file'; getFile(): Promise<File> }]>;
 }
 
-type Kind = 'md' | 'pdf' | 'image';
+type Kind = 'md' | 'pdf' | 'image' | 'one';
 export const kindOf = (path: string): Kind | null =>
   /\.(md|markdown)$/i.test(path)
     ? 'md'
@@ -50,7 +51,9 @@ export const kindOf = (path: string): Kind | null =>
       ? 'pdf'
       : /\.(png|jpe?g|gif|webp|avif|bmp)$/i.test(path)
         ? 'image'
-        : null;
+        : /\.one$/i.test(path)
+          ? 'one'
+          : null;
 const MIME: Record<string, string> = {
   md: 'text/markdown',
   markdown: 'text/markdown',
@@ -307,7 +310,11 @@ export async function importBundle(bundle: Bundle) {
     bundle.entries.filter((e) => kindOf(e.path) === 'md').map((e) => e.file.text()),
   );
   const shown = (img: Entry) => notes.some((md) => md.includes(img.path.split('/').pop()!));
-  const files = bundle.entries.filter((e) => kindOf(e.path) !== 'image' || !shown(e));
+  // OneNote sections open as sections of their own (onenote.ts), after the rest.
+  const ones = bundle.entries.filter((e) => kindOf(e.path) === 'one');
+  const files = bundle.entries.filter(
+    (e) => kindOf(e.path) !== 'one' && (kindOf(e.path) !== 'image' || !shown(e)),
+  );
   files.sort(byPath);
   const link: Link = {
     bundle,
@@ -346,19 +353,24 @@ export async function importBundle(bundle: Bundle) {
     }
   }
   const first = sections.find((s) => s.pages.length);
-  if (!first) {
+  if (!first && !ones.length) {
     toast(`Nothing in “${bundle.name}” could be imported.`, 4000);
     return;
   }
-  update((s) => {
-    nb.sections.push(...sections);
-    s.sectionId = first.id;
-    s.pageId = first.pages[0]!.id;
-  });
-  if (bundle.dir) {
-    links.push(link);
-    watch();
+  if (first) {
+    update((s) => {
+      nb.sections.push(...sections);
+      s.sectionId = first.id;
+      s.pageId = first.pages[0]!.id;
+    });
+    if (bundle.dir) {
+      links.push(link);
+      watch();
+    }
   }
+  for (const e of ones.sort(byPath))
+    await importOneNote(new File([e.file], e.path.split('/').pop() ?? 'section.one'));
+  if (!first) return; // the OneNote imports said what happened
   toast(
     `Imported “${bundle.name}”: ${link.files.size} file${link.files.size === 1 ? '' : 's'}` +
       (failed ? `, ${failed} couldn’t be read` : '') +
@@ -447,6 +459,7 @@ function summary(b: Bundle) {
     [n('md'), 'Markdown note'],
     [n('pdf'), 'PDF'],
     [n('image'), 'picture'],
+    [n('one'), 'OneNote section'],
   ]
     .filter(([c]) => c)
     .map(([c, w]) => `${c} ${w}${c === 1 ? '' : 's'}`);
@@ -485,7 +498,7 @@ const blobUrl = (e: Entry) => {
 /** Asks what to do with a zip or folder: import it, or just look. */
 export function offerBundle(b: Bundle) {
   if (!b.entries.length) {
-    toast(`“${b.name}” has no Markdown notes, PDFs or pictures.`, 4000);
+    toast(`“${b.name}” has no Markdown notes, PDFs, pictures or OneNote sections.`, 4000);
     return;
   }
   const closeBtn = h('button', { class: 'tb-btn cal-close', 'aria-label': 'Close' }, icon(X, 18));
@@ -583,6 +596,15 @@ export function openViewer(b: Bundle) {
       pane.replaceChildren(back, host);
       const { createEditor } = await import('./markdown-editor');
       editor = createEditor(host, md, { onUpdate: () => {}, onSelection: () => {} }, false);
+    } else if (kind === 'one') {
+      pane.replaceChildren(
+        back,
+        h(
+          'p',
+          { class: 'cal-text' },
+          'A OneNote section cannot be previewed here. Choose Import to open it as an editable section, with its ink, text and pictures.',
+        ),
+      );
     } else {
       const pages = h('div', { class: 'bundle-pdf' });
       pane.replaceChildren(back, pages);

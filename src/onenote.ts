@@ -1,5 +1,6 @@
 import { toast } from './dom';
 import { storePicture } from './images';
+import { explainOneNoteError } from './onenote-errors';
 import {
   type ImageItem,
   newSection,
@@ -94,7 +95,7 @@ export async function importOneNote(file: File) {
   toast(`Opening ${file.name}…`, 2500);
   const parsed = await parseInWorker(await file.arrayBuffer());
   if (!parsed.ok || !parsed.pages) {
-    toast(`Couldn't open ${file.name}: ${parsed.error ?? 'unknown error'}`, 6000);
+    toast(explainOneNoteError(parsed.error ?? '', file.name), 12_000);
     return;
   }
   let skippedPictures = 0;

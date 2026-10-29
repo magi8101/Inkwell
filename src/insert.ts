@@ -223,14 +223,17 @@ insertButton.addEventListener('click', () =>
   ]),
 );
 
-// Drag and drop: the picture lands where it's dropped.
-stage.addEventListener('dragover', (e) => {
+// Drag and drop: files dropped anywhere in the window are taken (on the sidebar or a toolbar too:
+// left alone, the browser would open or download the file and could navigate away). A picture lands
+// where it is dropped on the page, in the middle of the page when dropped elsewhere. Drags of
+// something that is not a file (text, a page being moved in the sidebar) are not ours.
+addEventListener('dragover', (e) => {
   if (e.dataTransfer?.types.includes('Files')) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   }
 });
-stage.addEventListener('drop', (e) => {
+addEventListener('drop', (e) => {
   const dt = e.dataTransfer;
   if (!dt) return;
   // Folders and zips are listed and offered for import or viewing; taken now, while readable.
@@ -254,7 +257,12 @@ stage.addEventListener('drop', (e) => {
     const pictures = files.filter(
       (f) => !isInkwName(f) && !isOneNote(f) && !isPdf(f) && !isMarkdown(f) && !isExcalidraw(f),
     );
-    if (pictures.length) await addPictures(pictures, toWorld(e.clientX, e.clientY));
+    if (pictures.length) {
+      const r = stage.getBoundingClientRect();
+      const onPage =
+        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      await addPictures(pictures, onPage ? toWorld(e.clientX, e.clientY) : centre());
+    }
   })();
 });
 

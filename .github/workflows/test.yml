@@ -1,0 +1,53 @@
+# The checks and the browser tests, on every push to main and every pull request, so a change that
+# breaks something on another browser is seen at once. Separate from release.yml (which builds and
+# publishes only when a version tag is pushed). The tests that need a local Worker (live sessions and
+# share links) and the Rust lints run on a developer's machine and are not repeated here.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Checks and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint and types
+        run: |
+          npx biome check .
+          npx tsc --noEmit
+          npx tsc -p worker
+      - name: Unit checks
+        run: npm run check
+      - name: Build
+        run: npm run web:build
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Serve the build
+        run: |
+          npx vite preview --port 4173 &
+          for i in $(seq 1 30); do curl -sf http://localhost:4173/ >/dev/null && break; sleep 1; done
+      - name: Browser tests
+        run: |
+          set -e
+          for t in e2e e2e:files e2e:notes e2e:shapes e2e:ink e2e:backup e2e:inkw e2e:calibration e2e:drop e2e:openfile e2e:menus e2e:pdf e2e:onenote; do
+            echo "::group::$t"
+            npm run "$t"
+            echo "::endgroup::"
+          done

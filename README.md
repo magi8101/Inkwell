@@ -80,3 +80,7 @@ Modelled on Windows Ink, which draws "wet" ink on a high-priority path and "drie
 | S           | Shape auto-snap       | Ctrl+0 / Ctrl+= / Ctrl+- | Reset / zoom in / out |
 
 Notes are stored on the device in IndexedDB (older browser-storage notes migrate automatically). PDF export uses the standard PDF fonts, so non-Latin text prints as "?".
+
+## Licence
+
+Inkwell is released under the [MIT licence](LICENSE). Third-party software keeps its own licences: the vendored OneNote reader in `onenote/vendor/onenote_parser` is MPL-2.0 (its licence text is beside it, and `onenote/vendor/INKWELL-PATCH.md` lists the one change made to it), and libraries such as pdf.js and Tesseract are Apache-2.0.
